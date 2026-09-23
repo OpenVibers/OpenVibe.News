@@ -71,6 +71,13 @@ function load(env = process.env) {
             windowMs: int(env.NEWS_CLUSTER_WINDOW_HOURS, 72) * 3600 * 1000,
         },
 
+        // OpenVibe.Community: the comment thread of each public story (referenced by id, never
+        // copied). Needs community.comment.write, and community.comment.moderate to hide a thread.
+        community: {
+            publicUrl: trim(env.OV_COMMUNITY_URL || 'https://openvibe.community'),
+            internalUrl: trim(env.OV_COMMUNITY_INTERNAL_URL || 'http://127.0.0.1:4200'),
+        },
+
         // OpenVibe.AI (optional): the news.summarize_story / news.compare_perspectives seams. Unset:
         // stories are written by editors from the source items; AI output only ever lands as a draft.
         ai: {

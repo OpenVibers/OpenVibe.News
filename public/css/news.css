@@ -39,6 +39,12 @@ table.sources tr:target { background: var(--bg-card, #131c2e); }
 .source-summary { margin: 4px 0 0; font-size: .9rem; color: var(--text-secondary, #96a7c2); }
 .framing { font-size: .9rem; }
 .timeline ol { padding-left: 1.2rem; }
+.comments { margin-top: 28px; border-top: 1px solid var(--border, #1f2d47); }
+.comment-list, .comments .replies { list-style: none; padding-left: 0; }
+.comments .replies { margin-left: 1.2rem; border-left: 2px solid var(--border, #1f2d47); padding-left: 10px; }
+.comment { margin: 12px 0; }
+.comment p { margin: 4px 0; }
+.comment-form textarea { font-family: inherit; }
 .ov-breadcrumbs ol { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: .9rem; }
 .ov-breadcrumbs li + li::before { content: "›"; margin-right: 6px; color: var(--text-muted); }
 .ov-pagination { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0; }

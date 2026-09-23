@@ -45,7 +45,9 @@ Other tables in the same database:
 
 - Package companions: `news_story_citations` (one row per paragraph and timeline entry and cited
   Sources item, append-only), `news_story_reviews` (a person's approval of AI output),
-  `news_story_drafts`, `news_story_revision_purges`, `news_index_revisions` (Search sequencer).
+  `news_story_drafts`, `news_story_revision_purges`, `news_index_revisions` (Search sequencer),
+  `news_story_discussion_refs` (a story's OpenVibe.Community thread id; never a comment, a count or
+  an author).
 - `news_cluster_audit`: every merge, split and reversal with exactly which items moved.
 - `news_ingest_runs`: what every webhook delivery, pull and upstream fetch failure did.
 - `news_state` (the Sources cursor), `news_source_status` (display cache of Sources' registry
@@ -57,7 +59,8 @@ Other tables in the same database:
 - **Source adapters and the source registry.** OpenVibe.Sources owns them: which sites are read,
   under which terms, how and when. News reads items with `sources.item.read` and never fetches a
   site itself.
-- **Discussion.** OpenVibe.Community. (News does not attach comment threads yet.)
+- **Discussion.** OpenVibe.Community owns the comment threads, their comments and their
+  moderation. News keeps only each story's thread id and reads the thread on every render.
 - **AI generation.** OpenVibe.AI. News only receives drafts.
 - **Search.** OpenVibe.Search indexes what News sends through Events.
 - **Identity.** OpenVibe.Network: SSO, subjects and service principals.
@@ -110,6 +113,22 @@ Other tables in the same database:
   source's headline, summary and link leave the public page at once; a paragraph resting only on
   it is marked, and the gate makes the story noindex (`unsupported_claims`) until an editor
   publishes a revision that no longer rests on it — with a correction or update note.
+- **Comments** (OpenVibe.Community, referenced, never copied):
+  - A story open for discussion gets the thread Community resolves for EntityRef
+    `{ service: 'news', type: 'story', id }`, the first time its page is read. Open means published
+    (indexable or not: a noindex story is still public) with no paragraph resting only on a source
+    removed upstream. Drafts never get a thread: a Community thread is readable by anyone with its id.
+  - Only the thread id is stored (`news_story_discussion_refs`). The page reads the thread from
+    Community on every render, so Community's moderation and deletions are what readers see. When
+    Community cannot be read the page says comments are unavailable; it never shows an empty or
+    invented thread.
+  - Signed-in members comment with a plain form (`POST /stories/:slug/comments`, form token), as
+    themselves (`X-OV-Subject`, `community.comment.write`).
+  - Retracting or unpublishing a story, or a removal upstream that leaves a paragraph without a
+    source, hides its thread; publishing a revision that no longer rests on the removed source (or
+    republishing) shows it again. The call (`community.comment.moderate`) runs after the change
+    commits, is best effort, and never fails the change. A retracted story's page says comments are
+    closed; a story waiting for a revision says they are paused.
 - **AI** (optional seams, never publication truth):
   - OpenVibe.AI may deliver a draft revision with `X-OV-Origin: ai` (`news.story.revise`), naming
     `news.summarize_story` or `news.compare_perspectives` and its run.
@@ -128,7 +147,8 @@ Other tables in the same database:
 |---|---|
 | `/` | published stories, newest first (retracted ones stay, labelled) and the topics |
 | `/topics`, `/topics/:slug` | topics and each topic's stories |
-| `/stories/:slug`, `/stories/:slug.json` | a story (text with source numbers, source table, timeline, perspectives, corrections), and the same story as data |
+| `/stories/:slug`, `/stories/:slug.json` | a story (text with source numbers, source table, timeline, perspectives, corrections, the Community comment thread), and the same story as data |
+| `POST /stories/:slug/comments` | comment on the story's Community thread as the signed-in member (form token) |
 | `/feed.xml`, `/atom.xml`, `/feed.json`, `/topics/:slug/{feed.xml,atom.xml,feed.json}` | feeds (News' own text only) |
 | `/sitemap.xml` → `/sitemaps/stories.xml`, `/sitemaps/topics.xml` | indexable stories and topics only |
 | `/robots.txt`, `/llms.txt` | the automated-consumer policy and machine orientation |
@@ -195,6 +215,9 @@ are the proposals they were released from.
   `sources.item.*` and `sources.fetch.failed` subscriptions (`npm run subscribe`).
 - **OpenVibe.Network** (4000): SSO (OAuth client `news`, redirect `https://openvibe.news/auth/callback`),
   JWKS, `identity.subject.resolve` for editor names.
+- **OpenVibe.Community** (4200): `community.comment.write` (resolve a story's thread, comment as
+  the signed-in member) and `community.comment.moderate` (hide and show a story's thread).
+  Without them a story page says comments are unavailable; nothing else depends on Community.
 - **OpenVibe.Search**: consumes `news.index_document.*` through its `*.index_document.*`
   subscription; `news` must be in `SEARCH_EVENT_OWNERS`.
 - **Optional:** OpenVibe.AI (4700) with `ai.run.create` for namespace `news.*` (a bare `news` only matches a workflow literally named `news`).
@@ -208,6 +231,9 @@ Each grant is `[client, capability, audience]`:
 - `[news, events.event.publish, openvibe.events]`
 - `[news, events.subscription.manage, openvibe.events]`
 - `[news, identity.subject.resolve, openvibe.network]`
+- `[news, community.comment.write, openvibe.community]` (comment threads on stories)
+- `[news, community.comment.moderate, openvibe.community]` (hide the thread of a retracted,
+  unpublished or source-removed story)
 - `[news, ai.run.create, openvibe.ai]`, namespace `news.*` (optional: only with `OV_AI_INTERNAL_URL`)
 - For OpenVibe.AI to deliver drafts: `[ai, news.story.revise, openvibe.news]`, and
   `[ai, news.story.read, openvibe.news]` if it reads stories back.
@@ -220,6 +246,7 @@ Each grant is `[client, capability, audience]`:
 | A story with zero sources cannot be published; an uncited paragraph is refused. | `test/stories.test.js` |
 | Failed ingestion never fabricates: failed pulls, unreadable deliveries, `sources.fetch.failed` and title-less items are recorded and create no item, cluster or story text. | `test/ingest.test.js` |
 | A source correction or removal triggers a flag and a pending revision; published text is unchanged; a removed source leaves the page; publishing a revision that rests on it is refused; the editor's revision resolves the flags with a note. | `test/upstream.test.js` |
+| Community discussion is referenced, not duplicated: one thread per published story, only its id stored, read on render; Community down says comments are unavailable; drafts get no thread; retraction, unpublishing and a removed source hide it after the commit; members comment by form as themselves. | `test/discussion.test.js` |
 | Licensed material never leaks: bodies and summaries beyond the allowance never reach the database, pages, JSON, feeds, sitemaps, the API, events or Search. | `test/licensing.test.js` |
 | Dedupe by canonical URL, content hash and near-duplicate headline; idempotent replays. | `test/ingest.test.js` |
 | Clusters are deterministic and explained; merges and splits are audited and reversible. | `test/clusters.test.js` |
@@ -270,15 +297,19 @@ call the service live.
 - **XSS:** all HTML goes through `openvibe-publishing/ssr` auto-escaping; source links get
   `rel="noopener nofollow"`; helmet CSP.
 - **SSRF:** News makes no outbound request to a URL from content. It calls only its configured
-  Network, Sources, Events and AI hosts.
+  Network, Sources, Events, Community and AI hosts.
 - **Licensing and privacy:** see "Licensing" above; removed sources are masked everywhere public.
   The editor view shows removal reasons; the public view does not.
 - **Fabrication:** no seeded or generated stories, ratings or dates; dates come from sources or an
   editor citing one; empty feeds use a real time; JSON-LD omits unknown fields.
-- **Abuse:** rate limits on `/auth`, `/edit`, `/clusters` and `/api/v1`, in Express and in the
-  nginx reference.
-- **Known gaps:** no Community comment threads on stories yet; no per-story Media attachments; the
-  Sources registry name is cached and not refreshed after the first successful read.
+- **Abuse:** rate limits on `/auth`, `/edit`, `/clusters`, `/api/v1` and the comment form, in
+  Express and in the nginx reference.
+- **Comments:** Community owns the text and its moderation; News renders it through the same
+  auto-escaping and stores only the thread id. The comment form needs a signed-in member and the
+  form token, is rate-limited, and is refused for a story that is not open for discussion.
+- **Known gaps:** no per-story Media attachments; the Sources registry name is cached and not
+  refreshed after the first successful read; the Network does not hold News' two Community grants
+  yet, so story pages say comments are unavailable until they are added.
 
 ## Development
 
@@ -294,7 +325,8 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4820 (set OV_OAUTH
    Create `/etc/openvibe/news.env` (0600) from `.env.example` with `OV_OAUTH_CLIENT_SECRET`,
    `NEWS_EDITORS`, `NEWS_FORM_SECRET`, `NEWS_EVENTS_SECRET` (`openssl rand -hex 32`),
    `EVENTS_URL=http://127.0.0.1:4300`, `OV_SOURCES_INTERNAL_URL=http://127.0.0.1:4720`,
-   `BASE_URL=https://openvibe.news`, and optionally `OV_AI_INTERNAL_URL`.
+   `BASE_URL=https://openvibe.news`, `OV_COMMUNITY_INTERNAL_URL=http://127.0.0.1:4200`, and
+   optionally `OV_AI_INTERNAL_URL`.
 2. **Network:** create (or give a secret to) the OAuth client `news` with redirect
    `https://openvibe.news/auth/callback`, and add the grants listed above.
 3. **Search:** make sure `news` is in `SEARCH_EVENT_OWNERS`.

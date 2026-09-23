@@ -21,6 +21,7 @@
  *
  * Upstream changes to an item a story cites (a revision, a removal) go to stories.onUpstreamChange,
  * which flags the story and prepares a pending revision; published text is never changed silently.
+ * A removal can also hide the story's Community thread (domain/discussion.js, after the commit).
  */
 const { ids } = require('openvibe-contracts');
 const text = require('./text');
@@ -28,7 +29,7 @@ const text = require('./text');
 const NEAR_TITLE = { anyOutlet: 0.9, sameOutlet: 0.75, windowMs: 48 * 3600 * 1000 };
 const newItemId = (now) => `nsi_${ids.ulid(now)}`;
 
-function createIngest({ store, config, clusters, outbox, sources, log = console }) {
+function createIngest({ store, config, clusters, outbox, sources, discussion = null, log = console }) {
     const { db } = store;
     let stories = null;   // set by app.js (stories depend on ingest's items too)
     const q = {
@@ -183,6 +184,8 @@ function createIngest({ store, config, clusters, outbox, sources, log = console 
             const cur = q.bySourcesId.get(sourcesItemId);
             if (!cur) return { outcome: 'ignored', reason: 'never ingested' };
             if (cur.status === 'removed') return { outcome: 'unchanged', item: cur };
+            // A story resting on it may stop being open for comments (domain/discussion.js).
+            if (discussion) discussion.watchSource(cur.id);
             const now = store.now();
             db.prepare(`UPDATE news_source_items SET status = 'removed', summary = NULL, summary_basis = 'removed_upstream', removed_at = ?, removed_reason = ?,
                         sources_revision = MAX(sources_revision, COALESCE(?, sources_revision)), updated_at = ? WHERE id = ?`)

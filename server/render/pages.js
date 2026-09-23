@@ -4,7 +4,8 @@
  * Public pages (HTML bodies; layout.js wraps them). Everything a reader needs is in the HTML: the
  * text with its source numbers, the source table (factual fields from the sources, kept apart from
  * the editors' text), the timeline, perspectives, the correction history and any retraction or
- * upstream-change notice. Values are escaped by ssr.html unless wrapped in raw().
+ * upstream-change notice, then the story's OpenVibe.Community thread with a plain comment form.
+ * Values are escaped by ssr.html unless wrapped in raw().
  */
 const ssr = require('openvibe-publishing/ssr');
 
@@ -86,8 +87,40 @@ ${rest.length ? h`<h3>Not grouped</h3>${table(rest)}` : ''}`;
     return h`${tabs}${table(m.sources)}`;
 }
 
+const CLOSED = {
+    retracted: 'Comments are closed: this story was retracted.',
+    source_removed: 'Comments are paused while editors revise this story: a source it rests on was removed.',
+    not_published: 'Comments are available on published stories only.',
+};
+
+/** The Community thread (read from Community on this render), or why there is none. */
+function commentsSection(c, { path, csrf, signedIn, loginUrl }) {
+    const wrap = (inner) => String(h`<section id="comments" class="comments" aria-labelledby="comments-h"><h2 id="comments-h">Comments</h2>${raw(String(inner))}</section>`);
+    if (c.state === 'closed') return wrap(h`<p class="empty">${CLOSED[c.reason] || CLOSED.not_published}</p>`);
+    if (c.state === 'off') return wrap(h`<p class="empty">Comments are not connected on this server.</p>`);
+    if (c.state !== 'ok') return wrap(h`<p class="notice" role="status">Comments are unavailable: they could not be loaded from OpenVibe.Community right now. Reload later.</p>`);
+    const one = (x) => h`<li class="comment" id="comment-${x.id}">
+<p class="meta"><strong>${x.deleted ? '[deleted]' : (x.display_name || 'Anonymous')}</strong>${x.origin === 'ai' ? h` <span class="badge">AI</span>` : ''}${Number.isFinite(Date.parse(x.created_at)) ? h` · ${time(Date.parse(x.created_at))}` : ''}</p>
+${x.deleted ? h`<p class="empty">This comment was deleted.</p>` : raw(`<p>${ssr.escapeHtml(String(x.message || '')).replace(/\n/g, '<br>')}</p>`)}
+${x.replies && x.replies.length ? h`<ol class="replies">${x.replies.map(one)}</ol>` : ''}
+</li>`;
+    const list = c.comments.length ? h`<ol class="comment-list">${c.comments.map(one)}</ol>` : h`<p class="empty">No comments yet.</p>`;
+    const more = c.nextCursor ? h`<p><a href="${path}?comments_after=${c.nextCursor}#comments" rel="nofollow">More comments</a></p>` : '';
+    const form = c.thread && c.thread.visibility === 'locked'
+        ? h`<p class="empty">This thread is locked.</p>`
+        : signedIn
+            ? h`<form method="post" action="${path}/comments" class="comment-form">
+<input type="hidden" name="_csrf" value="${csrf}">
+<label for="comment-message">Add a comment</label>
+<textarea id="comment-message" name="message" rows="4" maxlength="5000" required></textarea>
+<button type="submit">Post comment</button>
+</form>`
+            : h`<p><a href="${loginUrl}">Sign in with OpenVibe</a> to comment.</p>`;
+    return wrap(h`<p class="meta">Comments are hosted by <a href="${c.communityUrl}">OpenVibe.Community</a>.</p>${list}${more}${form}`);
+}
+
 /** One story. */
-function storyPage(m, { group = 'number', breadcrumbs, jsonUrl, editUrl = null, decisionNote = null }) {
+function storyPage(m, { group = 'number', breadcrumbs, jsonUrl, editUrl = null, decisionNote = null, comments = null, signedIn = false, csrf = '', loginUrl = '/auth/login' }) {
     const notices = [];
     if (m.retraction) notices.push(h`<div class="retraction" role="alert"><h2>Retracted</h2><p>${m.retraction.note}</p><p class="meta">Retracted ${time(Date.parse(m.retraction.at))}. The story is kept here for the record and is not offered to search engines.</p></div>`);
     for (const u of m.upstream) {
@@ -112,11 +145,12 @@ ${m.perspectives.length && group !== 'perspective' ? h`<section class="perspecti
 ${m.corrections.length || m.retraction ? h`<ol>${m.corrections.map((c) => h`<li><strong>${c.kind === 'correction' ? 'Correction' : 'Update'}</strong> (${time(Date.parse(c.at))}, revision ${c.revision}): ${c.note}</li>`)}${m.retraction ? h`<li><strong>Retraction</strong> (${time(Date.parse(m.retraction.at))}): ${m.retraction.note}</li>` : ''}</ol>` : h`<p class="empty">None.</p>`}
 </section>
 <footer class="story-footer"><p class="meta">Revision ${m.rev.number}${decisionNote ? h` · ${decisionNote}` : ''} · <a href="${jsonUrl}">JSON</a>${editUrl ? h` · <a href="${editUrl}">Edit</a>` : ''}</p></footer>
-</article>`);
+</article>
+${raw(comments ? commentsSection(comments, { path: m.path, csrf, signedIn, loginUrl }) : '')}`);
 }
 
 function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
-module.exports = { home, topicsIndex, topicPage, storyPage, message, storyList, time, dateLabel, cites };
+module.exports = { home, topicsIndex, topicPage, storyPage, commentsSection, message, storyList, time, dateLabel, cites };

@@ -22,8 +22,10 @@ const { createViewerResolver } = require('./auth/viewer');
 const { createPeople } = require('./clients/network');
 const { createSourcesClient } = require('./clients/sources');
 const { createAi } = require('./clients/ai');
+const { createCommunity } = require('./clients/community');
 const { createNewsOutbox } = require('./events/outbox');
 const { createPublication } = require('./domain/publication');
+const { createDiscussion } = require('./domain/discussion');
 const { createClusters } = require('./domain/clusters');
 const { createIngest } = require('./domain/ingest');
 const { createStories } = require('./domain/stories');
@@ -53,8 +55,10 @@ function createApp(opts = {}) {
     const clusters = createClusters({ store, config, outbox });
     const sources = createSourcesClient({ config, fetchImpl });
     const ai = createAi({ config, fetchImpl });
-    const ingest = createIngest({ store, config, clusters, outbox, sources, log });
-    const stories = createStories({ store, config, publication, clusters, outbox, ai, log });
+    const community = createCommunity({ store, config, fetchImpl, log });
+    const discussion = createDiscussion({ store, publication, community, log });
+    const ingest = createIngest({ store, config, clusters, outbox, sources, discussion, log });
+    const stories = createStories({ store, config, publication, clusters, outbox, ai, discussion, log });
     ingest.setStories(stories);
     const topics = createTopics({ store });
     // Topics are the only seed (idempotent: missing slugs are added, existing ones never changed).
@@ -65,7 +69,7 @@ function createApp(opts = {}) {
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, ingest, outbox, log });
 
-    const ctx = { config, store, outbox, publication, clusters, sources, ai, ingest, stories, topics, people, reading, auth, viewers, worker };
+    const ctx = { config, store, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker };
 
     const app = express();
     app.disable('x-powered-by');

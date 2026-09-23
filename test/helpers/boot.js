@@ -6,6 +6,7 @@
  *   const t = await boot();                  // t.base, t.get(path, { as: user | token, form, json })
  *   t.editor                                 // a Network user listed in NEWS_EDITORS
  *   t.sources.addItem({...}); await t.pull() // Sources items → News
+ *   t.community.threads / .calls             // the Community mock (comment threads)
  *   t.deliver(event)                         // a signed Events webhook delivery
  *   t.clock.advance(ms)
  */
@@ -13,7 +14,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const http = require('http');
-const { startNetwork, startSources, startAi, delivery } = require('./mocks');
+const { startNetwork, startSources, startAi, startCommunity, delivery } = require('./mocks');
 
 const SECRET = 'test-webhook-secret-0123456789abcdef0123';
 
@@ -26,6 +27,7 @@ async function boot(opts = {}) {
     const network = await startNetwork();
     const sources = await startSources({ network });
     const ai = await startAi({ network });
+    const community = await startCommunity({ network });
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ov-news-test-'));
     const dbPath = path.join(dir, 'news.db');
     const clock = opts.clock || makeClock();
@@ -36,6 +38,7 @@ async function boot(opts = {}) {
         OV_NETWORK_URL: network.url, OV_NETWORK_INTERNAL_URL: network.url,
         OV_OAUTH_CLIENT_ID: 'news', OV_OAUTH_CLIENT_SECRET: 'shh', COOKIE_SECURE: 'false',
         OV_SOURCES_INTERNAL_URL: sources.url,
+        OV_COMMUNITY_URL: 'https://openvibe.community', OV_COMMUNITY_INTERNAL_URL: community.url,
         NEWS_EDITORS: editor.subject, NEWS_WORKER: 'off', NEWS_FORM_SECRET: 'test-form-secret',
         NEWS_EVENTS_SECRET: SECRET,
         ...(opts.ai ? { OV_AI_INTERNAL_URL: ai.url } : {}),
@@ -90,12 +93,12 @@ async function boot(opts = {}) {
     const api = (p, o = {}) => get(`/api/v1${p}`, { as: editor, ...o });
 
     const t = {
-        network, sources, ai, clock, dbPath, editor, get, api, events, deliver, SECRET,
+        network, sources, ai, community, clock, dbPath, editor, get, api, events, deliver, SECRET,
         pull: () => t.ctx.ingest.pull(),
         db: () => t.ctx.store.db,
         csrf: (user) => require('../../server/auth/forms').csrfToken({ formSecret: env.NEWS_FORM_SECRET }, user),
         async restart() { await stop(); await start(); },
-        async close() { await stop(); await network.close(); await sources.close(); await ai.close(); fs.rmSync(dir, { recursive: true, force: true }); },
+        async close() { await stop(); await network.close(); await sources.close(); await ai.close(); await community.close(); fs.rmSync(dir, { recursive: true, force: true }); },
     };
     await start();
     return t;

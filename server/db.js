@@ -20,6 +20,7 @@
  *
  * Also here, as companions (not authority for anything outside News):
  *   news_story_citations, news_story_reviews, news_story_drafts, news_story_revision_purges,
+ *   news_story_discussion_refs (a story's Community thread id, never its comments),
  *   news_index_revisions (publishing packages); news_cluster_audit (every merge, split and reversal);
  *   news_ingest_runs (what each webhook delivery, pull and upstream failure did); news_state (the
  *   Sources cursor); news_source_status (a display cache of Sources' registry and health);
@@ -32,6 +33,7 @@ const { createRevisionStore } = require('openvibe-publishing/revisions');
 const { createCitationStore } = require('openvibe-publishing/citations');
 const { createReviewLog } = require('openvibe-publishing/authorship');
 const { createIndexSequencer } = require('openvibe-publishing/index-hooks');
+const { createDiscussionRefs } = require('openvibe-publishing/discussion');
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS news_topics (
@@ -246,6 +248,7 @@ function openStore(dbPath, { now = () => Date.now() } = {}) {
         citations: createCitationStore(db, { prefix: 'news_story', now, revisions }),
         reviews: createReviewLog(db, { prefix: 'news_story', now }),
         sequencer: createIndexSequencer(db, { prefix: 'news', now }),
+        discussion: createDiscussionRefs(db, { prefix: 'news_story', now }),
         tx: (fn) => db.transaction(fn)(),
         getState(key, def = null) {
             const r = db.prepare('SELECT value FROM news_state WHERE key = ?').get(key);

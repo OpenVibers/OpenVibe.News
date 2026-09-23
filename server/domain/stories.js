@@ -54,7 +54,7 @@ function formatBody(paragraphs) {
     return (paragraphs || []).map((p) => `${p.text}${p.sources && p.sources.length ? ` [${p.sources.join(', ')}]` : ''}`).join('\n\n');
 }
 
-function createStories({ store, config, publication, clusters, outbox, ai = null, log = console }) {
+function createStories({ store, config, publication, clusters, outbox, ai = null, discussion = null, log = console }) {
     const { db } = store;
     const q = {
         byId: db.prepare('SELECT * FROM news_stories WHERE id = ?'),
@@ -475,6 +475,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
             if (story.state === 'retracted') throw new ApiError(409, 'story.retracted', 'A retracted story stays retracted; open a new story');
             return store.tx(() => {
                 const cur = q.byId.get(story.id);
+                if (discussion) discussion.watch(story.id);
                 const rev = revision == null || revision === '' ? store.revisions.head(story.id) : store.revisions.get(story.id, parseInt(revision, 10));
                 if (!rev && revision != null && revision !== '') throw new ApiError(404, 'revision.not_found', `No revision ${revision}`);
                 const found = problems(cur, rev);
@@ -520,6 +521,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
             return store.tx(() => {
                 const cur = q.byId.get(story.id);
                 if (cur.state !== 'published' && cur.state !== 'retracted') return { changed: false, story: cur };
+                if (discussion) discussion.watch(story.id);
                 const before = publication.snapshot(cur);
                 db.prepare("UPDATE news_stories SET state = 'unpublished', updated_at = ? WHERE id = ?").run(store.now(), story.id);
                 return { changed: true, story: publication.afterChange(before, story.id, { actor: viewer, traceparent }).story };
@@ -536,6 +538,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                 const cur = q.byId.get(story.id);
                 if (cur.state === 'retracted') return { changed: false, story: cur };
                 if (cur.state !== 'published') throw new ApiError(409, 'story.not_published', 'Only a published story can be retracted');
+                if (discussion) discussion.watch(story.id);
                 const now = store.now();
                 const before = publication.snapshot(cur);
                 db.prepare("UPDATE news_stories SET state = 'retracted', retracted_at = ?, updated_at = ? WHERE id = ?").run(now, now, story.id);

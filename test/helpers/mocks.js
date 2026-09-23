@@ -6,6 +6,7 @@
  *   Sources    /api/v1/items (change order, category filter, include_removed), /api/v1/items/:id,
  *              /api/v1/sources/:key — items the test adds, revises and removes
  *   AI         /api/v1/runs — a canned run result the test sets
+ *   Community  /api/v1/comments/threads/resolve, GET thread, POST comment, PUT visibility
  * userToken()/serviceToken() mint the tokens browsers and services present to News;
  * delivery() signs an Events webhook delivery.
  */
@@ -188,6 +189,59 @@ async function startAi({ network }) {
     return { ...srv, requests, setNext: (v) => { next = v; } };
 }
 
+async function startCommunity({ network }) {
+    const threads = new Map();   // id → { ref, visibility, comments: [] }
+    const byRef = new Map();
+    const calls = [];
+    let down = false;
+    let seq = 0;
+    const box = { probe: null };   // called on every request (e.g. to see whether News is inside a transaction)
+    const srv = await listen((req, raw, json) => {
+        const token = String(req.headers.authorization || '').slice(7);
+        const v = token ? serviceAuth.verifyServiceToken(token, { publicKey: network.publicPem, issuer: network.url, audience: 'openvibe.community' }) : null;
+        const cap = v && v.ok ? (v.claims.cap || []) : [];
+        calls.push({ method: req.method, url: req.url, subject: req.headers['x-ov-subject'] || null, cap, body: raw || null, probe: box.probe ? box.probe() : null });
+        if (down) return json(503, { code: 'down' });
+        if (req.url === '/api/v1/comments/threads/resolve' && req.method === 'POST') {
+            if (!cap.includes('community.comment.write')) return json(403, { code: 'capability.denied' });
+            const { ref } = JSON.parse(raw);
+            const key = `${ref.service}:${ref.type}:${ref.id}`;
+            if (byRef.has(key)) return json(200, { thread: { id: byRef.get(key), visibility: threads.get(byRef.get(key)).visibility }, created: false });
+            const id = ++seq;
+            threads.set(id, { ref, visibility: 'public', comments: [] });
+            byRef.set(key, id);
+            return json(201, { thread: { id, visibility: 'public' }, created: true });
+        }
+        let m = req.url.match(/^\/api\/v1\/comments\/threads\/(\d+)(\?.*)?$/);
+        if (m && req.method === 'GET') {
+            const t = threads.get(Number(m[1]));
+            if (!t || t.visibility === 'hidden') return json(404, { code: 'thread.not_found' });
+            return json(200, { thread: { id: Number(m[1]), visibility: t.visibility, comment_count: t.comments.length }, comments: t.comments, next_cursor: null });
+        }
+        m = req.url.match(/^\/api\/v1\/comments\/threads\/(\d+)\/comments$/);
+        if (m && req.method === 'POST') {
+            if (!cap.includes('community.comment.write')) return json(403, { code: 'capability.denied' });
+            const t = threads.get(Number(m[1]));
+            if (!t || t.visibility !== 'public') return json(409, { code: 'thread.closed' });
+            const body = JSON.parse(raw);
+            const who = network.directory.get(req.headers['x-ov-subject']);
+            const comment = { id: t.comments.length + 1, origin: 'user', display_name: who ? who.display_name : 'Someone', message: body.message, deleted: false, created_at: '2026-09-22T12:05:00.000Z' };
+            t.comments.push(comment);
+            return json(201, { comment });
+        }
+        m = req.url.match(/^\/api\/v1\/comments\/threads\/(\d+)\/visibility$/);
+        if (m && req.method === 'PUT') {
+            if (!cap.includes('community.comment.moderate')) return json(403, { code: 'capability.denied' });
+            const t = threads.get(Number(m[1]));
+            if (!t) return json(404, { code: 'thread.not_found' });
+            t.visibility = JSON.parse(raw).visibility;
+            return json(200, { thread: { id: Number(m[1]), visibility: t.visibility } });
+        }
+        return json(404, { code: 'route.not_found' });
+    });
+    return { ...srv, threads, calls, setDown: (v) => { down = v; }, setProbe: (fn) => { box.probe = fn; } };
+}
+
 /**
  * An Events webhook delivery for News: { body, headers } signed with the secret (v1 and v2, as
  * Events sends it). `v1Only` leaves the v2 headers off; `now` (ms) backdates the v2 timestamp.
@@ -201,4 +255,4 @@ function delivery(event, secret, { seq = 1, attempt = 1, v1Only = false, now = D
     return { body, envelope, headers: { 'content-type': 'application/json', 'x-openvibe-signature': sig, ...v2, 'x-openvibe-delivery-attempt': String(attempt), 'x-openvibe-seq': String(seq) } };
 }
 
-module.exports = { startNetwork, startSources, startAi, delivery, listen };
+module.exports = { startNetwork, startSources, startAi, startCommunity, delivery, listen };

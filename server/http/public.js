@@ -7,23 +7,29 @@
  *   GET /topics, /topics/:slug    topics and each topic's stories
  *   GET /stories/:slug            a story (…/:slug.json: the same story as data); ?group=outlet|perspective
  *                                 lets the reader choose how the source table is framed
+ *   POST /stories/:slug/comments  comment (the story's Community thread) as the signed-in member
  *   GET /feed.xml, /atom.xml, /feed.json, /topics/:slug/feed.{xml,json}, /topics/:slug/atom.xml
+ *
+ * Comments are the story's OpenVibe.Community thread, read from Community on every render (never
+ * copied here); a story that is not open for discussion (domain/discussion.js) shows no thread.
  *
  * Caching: a published story or a list rendered for an ANONYMOUS visitor is public for 60 s;
  * signed-in views, drafts, previews and refusals are `private, no-store`. Feeds are never
  * built for a viewer. Robots come from the gate: a retracted story is noindex with its reason.
  */
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const { renderPage } = require('../render/layout');
 const pages = require('../render/pages');
 const access = require('../domain/access');
+const { csrfToken, checkCsrf } = require('../auth/forms');
 
 const PER_PAGE = 20;
 
 function createPublicRoutes(ctx) {
-    const { config, store, stories, publication, reading, topics, viewers } = ctx;
+    const { config, store, stories, publication, reading, topics, viewers, community, discussion } = ctx;
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
 
@@ -123,6 +129,23 @@ function createPublicRoutes(ctx) {
 
     // ── Stories ─────────────────────────────────────────────
 
+    /** The story's Community thread as the page shows it: { state: ok|closed|off|unavailable, … }. */
+    async function commentsFor(req, story, headline) {
+        const st = discussion.status(story);
+        if (!st.open) return { state: 'closed', reason: st.reason };
+        if (!community.enabled) return { state: 'off' };
+        try {
+            const threadId = await community.threadFor(story, headline, req.ov);
+            if (!threadId) return { state: 'off' };
+            const data = await community.readThread(threadId, { after: req.query.comments_after, ctx: req.ov });
+            if (!data || !data.thread) throw new Error('Community returned no thread');
+            return { state: 'ok', thread: data.thread, comments: Array.isArray(data.comments) ? data.comments : [], nextCursor: data.next_cursor || null, communityUrl: community.publicUrl };
+        } catch (err) {
+            console.warn(`[News] comments for ${story.id} unavailable: ${err.message}`);
+            return { state: 'unavailable' };
+        }
+    }
+
     /** Render one story (also the editor's preview of a chosen revision). */
     async function renderStory(req, res, { story, rev = null, preview = false }) {
         const isEditor = access.isEditor(config, req.viewer);
@@ -131,6 +154,8 @@ function createPublicRoutes(ctx) {
         const decision = preview ? publication.decide(story, m.rev, { state: 'draft' }) : m.decision;
         const crumbs = [{ name: 'OpenVibe.News', url: '/' }, ...(m.topic ? [{ name: m.topic.name, url: publication.topicPath(m.topic) }] : []), { name: m.headline }];
         const cacheable = !preview && (story.state === 'published' || story.state === 'retracted');
+        const comments = preview ? null : await commentsFor(req, story, m.headline);
+        const signedIn = req.viewer.kind === 'user' && Boolean(req.viewer.subject);
         send(req, res, 200, {
             title: m.retraction ? `Retracted: ${m.headline}` : m.headline,
             description: m.paragraphs[0] ? m.paragraphs[0].text.slice(0, 200) : undefined,
@@ -143,6 +168,8 @@ function createPublicRoutes(ctx) {
                 group, breadcrumbs: crumbs, jsonUrl: `${m.path}.json`,
                 editUrl: isEditor ? `/edit/stories/${story.id}` : null,
                 decisionNote: preview ? `preview of revision ${m.rev.number} · ${decision.robots}` : null,
+                comments, signedIn, csrf: signedIn ? csrfToken(config, req.viewer) : '',
+                loginUrl: `/auth/login?next=${encodeURIComponent(m.path)}`,
             }),
         }, { cacheable });
     }
@@ -161,6 +188,28 @@ function createPublicRoutes(ctx) {
             return res.json(reading.storyJson(m));
         }
         return renderStory(req, res, { story });
+    }));
+
+    router.post('/stories/:slug/comments', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false }), express.urlencoded({ extended: false, limit: '32kb' }), wrap(async (req, res) => {
+        const story = stories.bySlug(req.params.slug);
+        if (!story || !story.published_revision || (story.state !== 'published' && story.state !== 'retracted')) return notFound(req, res);
+        const path = publication.storyPath(story);
+        if (req.viewer.kind !== 'user' || !req.viewer.subject) return res.redirect(303, `/auth/login?next=${encodeURIComponent(path)}`);
+        if (!checkCsrf(config, req.viewer, req.body && req.body._csrf)) return messagePage(req, res, 403, 'Form expired', 'Reload the story and try again.', { href: path, label: 'Back to the story' });
+        if (!discussion.status(story).open) return messagePage(req, res, 409, 'Comments are closed', 'This story does not take comments.', { href: path, label: 'Back to the story' });
+        if (!community.enabled) return messagePage(req, res, 503, 'Comments are unavailable', 'Comments are not connected on this server.', { href: path, label: 'Back to the story' });
+        const message = String((req.body && req.body.message) || '').trim();
+        if (!message) return res.redirect(303, `${path}#comments`);
+        if (message.length > 5000) return messagePage(req, res, 422, 'Comment too long', 'A comment is at most 5000 characters.', { href: path, label: 'Back to the story' });
+        try {
+            const rev = store.revisions.get(story.id, story.published_revision);
+            const threadId = await community.threadFor(story, rev && rev.fields.headline, req.ov);
+            if (!threadId) throw new Error('no thread');
+            await community.comment(threadId, req.viewer.subject, { message }, req.ov);
+        } catch (err) {
+            return messagePage(req, res, err.status === 429 ? 429 : 502, 'Comment not posted', `OpenVibe.Community did not accept the comment: ${err.message}`, { href: path, label: 'Back to the story' });
+        }
+        return res.redirect(303, `${path}#comments`);
     }));
 
     return { router, renderStory, notFound, messagePage, pageDecision, send };
