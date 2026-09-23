@@ -123,9 +123,13 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.strictEqual(pulled.counts.created || 0, 0, 'the pull backstop sees it as already applied');
     });
 
-    await check('webhook: bad signature 401, events from other producers ignored', async () => {
+    await check('webhook: bad signature, v1-only and stale v2 are 401; events from other producers ignored', async () => {
         const r = await t.deliver({ event_type: 'sources.item.created', payload: {} }, { secret: 'wrong-secret-wrong-secret-wrong-secret' });
         assert.strictEqual(r.status, 401);
+        const v1only = await t.deliver({ event_type: 'blog.post.published', source: 'blog', payload: {} }, { v1Only: true });
+        assert.strictEqual(v1only.status, 401, 'v1 only (no v2 header): refused');
+        const stale = await t.deliver({ event_type: 'blog.post.published', source: 'blog', payload: {} }, { now: Date.now() - 301000 });
+        assert.strictEqual(stale.status, 401, 'stale v2 (outside the 300 s window): refused');
         const other = await t.deliver({ event_type: 'blog.post.published', source: 'blog', payload: {} });
         assert.strictEqual(other.status, 204);
         const forged = await t.deliver({ event_type: 'sources.item.removed', source: 'blog', payload: { item_id: reports.a.id, reason: 'forged' } });

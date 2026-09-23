@@ -188,12 +188,17 @@ async function startAi({ network }) {
     return { ...srv, requests, setNext: (v) => { next = v; } };
 }
 
-/** An Events webhook delivery for News: { body, headers } signed with the secret. */
-function delivery(event, secret, { seq = 1, attempt = 1 } = {}) {
+/**
+ * An Events webhook delivery for News: { body, headers } signed with the secret (v1 and v2, as
+ * Events sends it). `v1Only` leaves the v2 headers off; `now` (ms) backdates the v2 timestamp.
+ */
+function delivery(event, secret, { seq = 1, attempt = 1, v1Only = false, now = Date.now() } = {}) {
     const envelope = { event_id: `evt_${ids.ulid(Date.now())}`, version: 1, timestamp: new Date().toISOString(), visibility: 'internal', actor: { type: 'service', id: 'sources' }, source: 'sources', payload: {}, ...event };
     const body = JSON.stringify({ event: envelope, seq });
     const sig = `sha256=${crypto.createHmac('sha256', secret).update(body).digest('hex')}`;
-    return { body, envelope, headers: { 'content-type': 'application/json', 'x-openvibe-signature': sig, 'x-openvibe-delivery-attempt': String(attempt), 'x-openvibe-seq': String(seq) } };
+    const ts = Math.floor(now / 1000);
+    const v2 = v1Only ? {} : { 'x-openvibe-timestamp': String(ts), 'x-openvibe-signature-v2': `t=${ts},v2=${crypto.createHmac('sha256', secret).update(`${ts}.${body}`).digest('hex')}` };
+    return { body, envelope, headers: { 'content-type': 'application/json', 'x-openvibe-signature': sig, ...v2, 'x-openvibe-delivery-attempt': String(attempt), 'x-openvibe-seq': String(seq) } };
 }
 
 module.exports = { startNetwork, startSources, startAi, delivery, listen };
