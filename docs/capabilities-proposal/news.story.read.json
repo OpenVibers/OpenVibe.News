@@ -1,0 +1,22 @@
+{
+  "id": "news.story.read",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Read any story, including drafts, revisions, diffs, publishability problems and editorial flags. Published stories need no capability.",
+  "permissions": [
+    "news:read"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-read",
+  "events": [],
+  "implementedBy": [
+    "GET /api/v1/stories/:id",
+    "GET /api/v1/stories/:id/revisions",
+    "GET /api/v1/stories/:id/revisions/:n",
+    "GET /api/v1/stories/:id/diff"
+  ]
+}

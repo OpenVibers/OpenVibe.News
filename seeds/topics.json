@@ -1,0 +1,17 @@
+{
+  "_about": "The only seed OpenVibe.News has: canonical topic identities (slug, name, description). No stories, no source items and no clusters are seeded — News publishes nothing until an editor does. Seeding never renames or re-describes an existing topic.",
+  "topics": [
+    { "slug": "space", "name": "Space", "description": "Spaceflight, astronomy and planetary science." },
+    { "slug": "science", "name": "Science", "description": "Research and scientific findings." },
+    { "slug": "technology", "name": "Technology", "description": "Computing, the internet and the companies that build them." },
+    { "slug": "open-source", "name": "Open source", "description": "Open-source software, projects and communities." },
+    { "slug": "games", "name": "Games", "description": "Video games, the people who make them and the industry around them." },
+    { "slug": "streaming", "name": "Streaming", "description": "Live streaming, creators and platforms." },
+    { "slug": "internet-policy", "name": "Internet policy", "description": "Law, regulation and governance of the internet." },
+    { "slug": "security", "name": "Security", "description": "Information security, vulnerabilities and incidents." },
+    { "slug": "climate", "name": "Climate", "description": "Climate, weather and the environment." },
+    { "slug": "health", "name": "Health", "description": "Public health and medicine." },
+    { "slug": "business", "name": "Business", "description": "Companies, markets and the economy." },
+    { "slug": "world", "name": "World", "description": "International news." }
+  ]
+}

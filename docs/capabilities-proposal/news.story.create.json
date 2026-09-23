@@ -1,0 +1,21 @@
+{
+  "id": "news.story.create",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Open a story from a cluster (the cluster's live, non-duplicate source items become its first sources). Editors only: the service acts for an editor named in X-OV-Subject.",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [
+    "news.story.created"
+  ],
+  "implementedBy": [
+    "POST /api/v1/stories"
+  ]
+}

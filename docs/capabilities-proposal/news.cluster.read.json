@@ -1,0 +1,22 @@
+{
+  "id": "news.cluster.read",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Read clusters (members, the stored explanation of every membership, merge/split history), source items with their dedupe outcome, and ingestion runs and source health.",
+  "permissions": [
+    "news:read"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-read",
+  "events": [],
+  "implementedBy": [
+    "GET /api/v1/clusters",
+    "GET /api/v1/clusters/:id",
+    "GET /api/v1/source-items/:id",
+    "GET /api/v1/ingest"
+  ]
+}

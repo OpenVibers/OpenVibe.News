@@ -1,0 +1,19 @@
+{
+  "id": "news.topic.manage",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Add a canonical topic (slug and name).",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [],
+  "implementedBy": [
+    "POST /api/v1/topics"
+  ]
+}

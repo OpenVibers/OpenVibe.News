@@ -1,0 +1,21 @@
+{
+  "id": "news.perspective.update",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Create or remove editor-labelled perspective groupings on a story and assign its sources to them. Labels are written by editors, never generated.",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [],
+  "implementedBy": [
+    "POST /api/v1/stories/:id/perspectives",
+    "DELETE /api/v1/stories/:id/perspectives/:pid",
+    "PUT /api/v1/stories/:id/sources/:item/perspective"
+  ]
+}

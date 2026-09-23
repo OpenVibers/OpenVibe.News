@@ -1,0 +1,22 @@
+{
+  "id": "news.story.retract",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Retract a published story with a public note. The story stays at its URL with the retraction notice, becomes noindex and leaves sitemaps and Search. Final.",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [
+    "news.story.retracted",
+    "news.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/stories/:id/retract"
+  ]
+}

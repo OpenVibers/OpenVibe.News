@@ -1,0 +1,23 @@
+{
+  "id": "news.cluster.manage",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Merge clusters, split items into a new cluster, and reverse a merge or split. Every change is audited with exactly which items moved.",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [
+    "news.cluster.updated"
+  ],
+  "implementedBy": [
+    "POST /api/v1/clusters/:id/merge",
+    "POST /api/v1/clusters/:id/split",
+    "POST /api/v1/clusters/audit/:auditId/reverse"
+  ]
+}

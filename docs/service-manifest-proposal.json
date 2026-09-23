@@ -1,0 +1,52 @@
+{
+  "version": "0.1.0",
+  "contractRanges": {
+    "openvibe-contracts": ">=0.19.0 <1.0.0"
+  },
+  "id": "news",
+  "name": "OpenVibe.News",
+  "status": "alpha",
+  "repository": "OpenVibers/OpenVibe.News",
+  "domains": [
+    "openvibe.news"
+  ],
+  "publicOrigin": "https://openvibe.news",
+  "health": "/api/health",
+  "ready": "/api/ready",
+  "capabilities": [
+    "news.story.create",
+    "news.story.read",
+    "news.story.revise",
+    "news.story.publish",
+    "news.story.retract",
+    "news.cluster.read",
+    "news.cluster.manage",
+    "news.source.attach",
+    "news.timeline.update",
+    "news.perspective.update",
+    "news.topic.manage"
+  ],
+  "eventsProduced": [
+    "news.source.ingested",
+    "news.source.failed",
+    "news.cluster.updated",
+    "news.story.created",
+    "news.story.flagged",
+    "news.story.published",
+    "news.story.updated",
+    "news.story.unpublished",
+    "news.story.retracted",
+    "news.index_document.upserted",
+    "news.index_document.deleted"
+  ],
+  "eventsConsumed": [
+    "sources.item.created",
+    "sources.item.updated",
+    "sources.item.removed",
+    "sources.fetch.failed"
+  ],
+  "namespacesOwned": [
+    "news.*"
+  ],
+  "notes": "Port 4820. Owns news_topics, news_source_items, news_story_clusters, news_stories, news_story_revisions, news_story_sources, news_perspectives, news_timeline_entries, news_editorial_flags in its own SQLite (openvibe-publishing packages, prefixes news_story and news). Consumes OpenVibe.Sources (sources.item.read, optionally sources.source.read) through an Events subscription (sources.item.*, sources.fetch.failed; events.subscription.manage) and a cursor pull; OpenVibe.Network (SSO, identity.subject.resolve); optionally OpenVibe.AI (ai.run.create, namespace news) for news.summarize_story and news.compare_perspectives drafts; publishes through OpenVibe.Events (events.event.publish); OpenVibe.Search reads news.index_document.* from Events."
+}

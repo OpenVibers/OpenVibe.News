@@ -1,0 +1,26 @@
+{
+  "id": "news.story.publish",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Publish a revision (refused while it cites no source, rests on a source removed upstream or detached, or is AI-generated/AI-assisted without a person's approval), or unpublish a story. Publishing resolves the upstream flags the revision answers and publishes pending correction/update notes.",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [
+    "news.story.published",
+    "news.story.updated",
+    "news.story.unpublished",
+    "news.index_document.upserted",
+    "news.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/stories/:id/publish",
+    "POST /api/v1/stories/:id/unpublish"
+  ]
+}

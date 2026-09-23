@@ -1,0 +1,21 @@
+{
+  "id": "news.story.revise",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Save a new immutable revision (headline and paragraphs that each cite attached sources, with the source table, timeline and perspectives snapshotted), add correction/update notes, or request an OpenVibe.AI draft. With X-OV-Origin: ai the revision is AI-generated and cannot be published until a person approves it.",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [],
+  "implementedBy": [
+    "POST /api/v1/stories/:id/revisions",
+    "POST /api/v1/stories/:id/ai-drafts",
+    "POST /api/v1/stories/:id/flags"
+  ]
+}
