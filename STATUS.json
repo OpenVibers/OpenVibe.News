@@ -7,14 +7,15 @@
   "runtime": "node 22, express 4, better-sqlite3 11",
   "port": 4820,
   "domain": "openvibe.news",
-  "packages": ["openvibe-publishing v0.2.0", "openvibe-contracts v0.19.0", "openvibe-shared v1.3.0", "openvibe-sdk v0.2.2"],
+  "packages": ["openvibe-publishing v0.2.1", "openvibe-contracts v0.21.0", "openvibe-shared v1.3.0", "openvibe-sdk v0.4.0"],
   "capabilities": ["news.story.create", "news.story.read", "news.story.revise", "news.story.publish", "news.story.retract", "news.cluster.read", "news.cluster.manage", "news.source.attach", "news.timeline.update", "news.perspective.update", "news.topic.manage"],
-  "capabilitiesRegistered": false,
-  "serviceManifestRegistered": false,
-  "inputs": "OpenVibe.Sources items (category news) via an Events subscription and a cursor pull; both untested against the running Sources service",
-  "ai": "optional seam (news.summarize_story, news.compare_perspectives) tested against a mock; OpenVibe.AI output only ever lands as a draft that needs a person's review",
-  "seed": "topics only; no stories, source items or clusters",
-  "deployed": false,
+  "capabilitiesRegistered": true,
+  "serviceManifestRegistered": true,
+  "inputs": "OpenVibe.Sources items (category news) via the Events subscriptions sources.item.* and sources.fetch.failed (created in production 2026-09-23) and a cursor pull; every Sources seed is disabled, so no item has arrived yet (181 empty ingest runs, 0 source items)",
+  "ai": "optional seam (news.summarize_story, news.compare_perspectives) tested against a mock; not configured in production (OV_AI_INTERNAL_URL unset); OpenVibe.AI output only ever lands as a draft that needs a person's review",
+  "seed": "topics only (12 in production); no stories, source items or clusters",
+  "deployed": true,
+  "deployment": "openvibe-ovh, unit openvibe-news, 127.0.0.1:4820 loopback only (release 1802e7d); /api/ready 200; production database holds 12 topics and 0 stories. Deployed internally, not launched: openvibe.news still serves the OpenVibe.Sites placeholder until a person verifies a news source's terms, enables it in Sources, and an editor publishes a reviewed story",
   "placeholderInSites": true,
-  "updated": "2026-09-22"
+  "updated": "2026-09-23"
 }

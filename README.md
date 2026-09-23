@@ -3,10 +3,12 @@
 > Source-backed stories: clustered coverage, cited paragraphs, perspectives, timelines and a
 > public correction history.
 
-**Status:** alpha (roadmap Wave 17, News half). The service runs and its tests pass. It is **not
-deployed**, `openvibe.news` still shows its placeholder from OpenVibe.Sites, and its capabilities and
-service manifest are proposals that the next openvibe-contracts release has to include. It has not
-yet ingested from the running OpenVibe.Sources service (every Sources seed is disabled).
+**Status:** alpha (roadmap Wave 17, News half). The service runs and its tests pass. It is
+**deployed internally, not launched**: it runs on the production host on 127.0.0.1:4820 only
+(release `1802e7d`, `/api/ready` 200), while `openvibe.news` still shows its placeholder from
+OpenVibe.Sites. Its capabilities and service manifest are registered in openvibe-contracts v0.21.0.
+The production database holds 12 topics and no stories: it has not ingested anything from the
+running OpenVibe.Sources service, because every Sources seed is disabled.
 **Domain:** `openvibe.news` · **Port:** 4820 · **Service id:** `news`
 **Plan:** OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026), §12.7; roadmap §15.13, §29, §32.
 **License:** AGPL-3.0 (same as every OpenVibe service).
@@ -165,7 +167,7 @@ five minutes and are never built for a viewer.
 | `news.story.retracted` | public for a listable story; the retraction note |
 | `news.index_document.upserted` / `.deleted` | `search.index-document@1` documents (provenance: the Sources items and the AI run) and tombstones, with a monotonic index revision |
 
-### Capabilities (proposed: `docs/capabilities-proposal/`)
+### Capabilities (registered in openvibe-contracts v0.21.0)
 
 Service tokens use audience `openvibe.news`, one capability per route; the editor the service acts
 for goes in `X-OV-Subject` and must be an editor:
@@ -176,16 +178,17 @@ for goes in `X-OV-Subject` and must be an editor:
 - `news.topic.manage`
 
 Browser and app user JWTs are judged as editors (`NEWS_EDITORS` subjects and Network admins).
-Until the proposals are released, grants for these ids are decided locally with the contracts
-library's matching rule (`server/auth/capabilities.js`). The service manifest proposal is
-`docs/service-manifest-proposal.json`.
+Grants for these ids are decided with the contracts library's matching rule
+(`server/auth/capabilities.js`). The ids and the service manifest are released in
+openvibe-contracts v0.21.0; `docs/capabilities-proposal/` and `docs/service-manifest-proposal.json`
+are the proposals they were released from.
 
 ## Depends on
 
-- **Packages** (pinned by release tarball): `openvibe-publishing` v0.2.0 (revisions, citations,
-  authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.19.0,
+- **Packages** (pinned by release tarball): `openvibe-publishing` v0.2.1 (revisions, citations,
+  authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.21.0,
   `openvibe-shared` v1.3.0 (chrome, app icon, footer, legal, release, metrics, ready, seo),
-  `openvibe-sdk` v0.2.2 (events outbox and inbox, webhook signatures, service tokens).
+  `openvibe-sdk` v0.4.0 (events outbox and inbox, webhook signatures v2, service tokens).
 - **OpenVibe.Sources** (4720): `sources.item.read`; optionally `sources.source.read` (outlet
   names and source health; without it the outlet is the URL's host).
 - **OpenVibe.Events** (4300): `events.event.publish`; `events.subscription.manage` to create the
@@ -227,8 +230,10 @@ Each grant is `[client, capability, audience]`:
 | Health, readiness, release, robots, llms.txt, sitemaps, legal, problems, CORS, topics-only seed. | `test/ops.test.js` |
 
 Not yet demonstrated: ingestion from the deployed OpenVibe.Sources (its seeds are disabled until a
-person verifies their terms), delivery through the running OpenVibe.Events, and an OpenVibe.AI run
-(the AI service is still being built; the seam is tested against a mock of its runs API).
+person verifies their terms; production has 181 ingest runs and 0 items), delivery of a real item
+through the running OpenVibe.Events (the `sources.item.*` and `sources.fetch.failed` subscriptions
+exist), and an OpenVibe.AI run (OpenVibe.AI runs on the host, but News in production has no
+`OV_AI_INTERNAL_URL`; the seam is tested against a mock of its runs API).
 
 ## Launch rule
 
@@ -239,9 +244,10 @@ exists:
 1. **Runtime, health, readiness, observability:** done.
 2. **Canonical identity and auth:** done (Network SSO, subjects, service tokens).
 3. **SSR public routes useful without JS:** done.
-4. **Persistence and end-to-end workflows:** done in tests; not yet against live Sources items.
-5. **Capability and event registration against OpenVibe.Contracts:** proposals are in `docs/`,
-   waiting on the release.
+4. **Persistence and end-to-end workflows:** done in tests and deployed on the host (loopback
+   only); not yet against live Sources items, since no news source is enabled.
+5. **Capability and event registration against OpenVibe.Contracts:** done (openvibe-contracts
+   v0.21.0).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. Nothing
    to migrate; the seed is topics only; the threat review is below.
 7. **Acceptance tests:** done.
@@ -256,8 +262,9 @@ call the service live.
 - **Identity:** only verified Network JWTs (offline RS256) and service tokens for audience
   `openvibe.news`. A bad service token is refused, never downgraded. Identity never comes from a
   body or query; `X-OV-*` headers are ignored for browsers. AI deliveries can only write drafts.
-- **Webhook:** HMAC-SHA256 over the raw body with `NEWS_EVENTS_SECRET` (rotation: comma-separated),
-  constant-time comparison, `evt_` ids, exactly-once inbox. Only events from source `sources` are
+- **Webhook:** signature v2 only: HMAC-SHA256 over `<timestamp>.<raw body>` with
+  `NEWS_EVENTS_SECRET` (rotation: comma-separated), timestamp within 300 s, constant-time
+  comparison; a v1-only or stale delivery is refused. `evt_` ids, exactly-once inbox. Only events from source `sources` are
   applied. nginx never proxies `/internal/`.
 - **CSRF:** SameSite=Lax session cookie plus an HMAC form token on every desk form.
 - **XSS:** all HTML goes through `openvibe-publishing/ssr` auto-escaping; source links get
@@ -298,8 +305,8 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4820 (set OV_OAUTH
    `http://127.0.0.1:4820/internal/events`). The cursor pull starts on its own.
 7. **Sources:** News shows nothing until a news source is enabled in OpenVibe.Sources (terms
    verified by a person) and an editor publishes a story.
-8. **Contracts:** release the capability and manifest proposals in openvibe-contracts; then CI's
-   contracts check can drop `continue-on-error`.
+8. **Contracts:** done: the capabilities and manifest are released in openvibe-contracts v0.21.0,
+   and CI's contracts check runs against them.
 9. **Launch:** in the same release, remove `openvibe.news` from OpenVibe.Sites and flip the Network
    hub entry (see the launch rule above).
 
