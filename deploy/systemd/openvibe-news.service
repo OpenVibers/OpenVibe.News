@@ -1,0 +1,32 @@
+[Unit]
+Description=OpenVibe.News — source-backed stories from OpenVibe.Sources items
+# Network (sign-in, JWKS, service tokens), Sources (the items, over loopback) and Events (the outbox
+# relay and the webhook) should be up first, but News degrades gracefully without them: pages and
+# feeds serve; sign-in, ingestion and events wait and are reported by /api/ready.
+After=network.target
+Wants=openvibe-network.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/openvibe.news
+EnvironmentFile=/etc/openvibe/news.env
+Environment=NODE_ENV=production
+Environment=PORT=4820
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env node /opt/openvibe.news/server/index.js
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# News' own database lives in /var/lib/openvibe-news; the code tree stays read-only.
+StateDirectory=openvibe-news
+Environment=NEWS_DB_PATH=/var/lib/openvibe-news/news.db
+
+[Install]
+WantedBy=multi-user.target
