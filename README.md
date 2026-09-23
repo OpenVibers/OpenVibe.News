@@ -194,7 +194,7 @@ library's matching rule (`server/auth/capabilities.js`). The service manifest pr
   JWKS, `identity.subject.resolve` for editor names.
 - **OpenVibe.Search**: consumes `news.index_document.*` through its `*.index_document.*`
   subscription; `news` must be in `SEARCH_EVENT_OWNERS`.
-- **Optional:** OpenVibe.AI (4700) with `ai.run.create` for namespace `news`.
+- **Optional:** OpenVibe.AI (4700) with `ai.run.create` for namespace `news.*` (a bare `news` only matches a workflow literally named `news`).
 
 ### Grants the Network must hold
 
@@ -205,7 +205,7 @@ Each grant is `[client, capability, audience]`:
 - `[news, events.event.publish, openvibe.events]`
 - `[news, events.subscription.manage, openvibe.events]`
 - `[news, identity.subject.resolve, openvibe.network]`
-- `[news, ai.run.create, openvibe.ai]`, namespace `news` (optional: only with `OV_AI_INTERNAL_URL`)
+- `[news, ai.run.create, openvibe.ai]`, namespace `news.*` (optional: only with `OV_AI_INTERNAL_URL`)
 - For OpenVibe.AI to deliver drafts: `[ai, news.story.revise, openvibe.news]`, and
   `[ai, news.story.read, openvibe.news]` if it reads stories back.
 
