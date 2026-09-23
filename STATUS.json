@@ -7,7 +7,7 @@
   "runtime": "node 22, express 4, better-sqlite3 11",
   "port": 4820,
   "domain": "openvibe.news",
-  "packages": ["openvibe-publishing v0.2.1", "openvibe-contracts v0.21.0", "openvibe-shared v1.3.0", "openvibe-sdk v0.4.0"],
+  "packages": ["openvibe-publishing v0.2.1", "openvibe-contracts v0.32.0", "openvibe-shared v1.5.0", "openvibe-sdk v0.5.0"],
   "capabilities": ["news.story.create", "news.story.read", "news.story.revise", "news.story.publish", "news.story.retract", "news.cluster.read", "news.cluster.manage", "news.source.attach", "news.timeline.update", "news.perspective.update", "news.topic.manage"],
   "capabilitiesRegistered": true,
   "serviceManifestRegistered": true,

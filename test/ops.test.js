@@ -24,6 +24,8 @@ const { boot, check, done } = require('./helpers/boot');
         const rel = await t.get('/release.json');
         assert.strictEqual(rel.status, 200);
         assert.strictEqual(rel.json().service, 'news');
+        assert.deepStrictEqual(require('openvibe-contracts').validate('registry.release-manifest@1', rel.json()).errors, []);
+        assert.strictEqual(rel.json().metrics_url, '/release-metrics');
         const m = await t.get('/metrics');
         assert.ok([200, 404].includes(m.status));
     });

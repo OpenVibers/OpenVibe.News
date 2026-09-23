@@ -104,7 +104,8 @@ function createApp(opts = {}) {
 
     // ── Machine endpoints ───────────────────────────────────
     app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'openvibe-news', version: VERSION }));
-    app.get('/release.json', release.handler);
+    // GET /release.json (ADR-016) and POST /release-metrics: open tabs' update reports into /metrics.
+    release.mount(app, { registry: metrics.registry });
     const readiness = createNewsReadiness({ store, auth, outbox, ingest, config, release: release.release });
     app.get('/api/ready', readiness.handler);
 

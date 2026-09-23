@@ -217,9 +217,9 @@ are the proposals they were released from.
 ## Depends on
 
 - **Packages** (pinned by release tarball): `openvibe-publishing` v0.2.1 (revisions, citations,
-  authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.21.0,
-  `openvibe-shared` v1.3.0 (chrome, app icon, footer, legal, release, metrics, ready, seo),
-  `openvibe-sdk` v0.4.0 (events outbox and inbox, webhook signatures v2, service tokens).
+  authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.32.0,
+  `openvibe-shared` v1.5.0 (chrome, app icon, footer, legal, release, metrics, ready, seo),
+  `openvibe-sdk` v0.5.0 (events outbox and inbox, webhook signatures v2, service tokens).
 - **OpenVibe.Sources** (4720): `sources.item.read`; optionally `sources.source.read` (outlet
   names and source health; without it the outlet is the URL's host).
 - **OpenVibe.Events** (4300): `events.event.publish`; `events.subscription.manage` to create the
