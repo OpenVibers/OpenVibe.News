@@ -106,7 +106,8 @@ const BODY = [
     });
 
     await check('the editor revises without the removed source; publishing needs a correction note, then resolves both flags', async () => {
-        const fixed = BODY.split('\n\n').slice(0, 2).map((p) => p.replace('[1, 2]', '[2]')).join('\n\n');
+        // [1] leaves; the first paragraph now rests on [2] and [3], two independent outlets (the index gate needs two).
+        const fixed = BODY.split('\n\n').slice(0, 2).map((p) => p.replace('[1, 2]', '[2, 3]')).join('\n\n');
         r = await t.api(`/stories/${story.id}/sources/${t.db().prepare('SELECT id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).id}`, { method: 'DELETE' });
         assert.strictEqual(r.status, 200, r.text);
         r = await t.api(`/stories/${story.id}/revisions`, { json: { body: fixed.replace('2030', '2031'), expected_revision: 3 } });

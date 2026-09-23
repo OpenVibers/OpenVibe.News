@@ -160,8 +160,19 @@ Other tables in the same database:
 ### Discoverability (roadmap §32)
 
 - Robots meta, canonical and `X-Robots-Tag` come from the `openvibe-publishing/seo` gate with
-  explicit reasons. News' policy: at least one live cited source, at least 40 words; unsupported
-  claims, retraction, an editor's noindex and unreviewed AI output are never indexable.
+  explicit reasons. News' policy: at least two independent live cited sources
+  (`NEWS_MIN_INDEPENDENT_SOURCES`, default 2), at least 40 words; unsupported claims, retraction,
+  an editor's noindex and unreviewed AI output are never indexable.
+- **Independent sources** (`text.independentSources`): the live Sources items the published
+  revision's paragraphs cite, where items count as one source when they share the OpenVibe.Sources
+  source (`source_key`: the same feed or registry entry), the publisher's domain of their canonical
+  URL (`news.example.com` and `www.example.com` are `example.com`; `news.bbc.co.uk` is
+  `bbc.co.uk`), the outlet name, or the original report they duplicate (a syndicated or copied
+  report dedupe marked as a duplicate). The relation is transitive and deliberately coarse: two
+  sites on one shared host count once. A story on fewer independent sources is still published,
+  listed and readable, but `noindex` with the reason `unsourced` (for example `1 of 2 sources`),
+  so it is out of the sitemaps and its Search document says noindex. Setting the minimum to 1
+  restores the one-source gate.
 - JSON-LD `NewsArticle` from real fields only: headline, dates, the editors named in the
   revision's authorship (only when the Network name is known), the section (topic), the cited
   source URLs, and OpenVibe.News as publisher. Missing fields are omitted.
@@ -250,6 +261,7 @@ Each grant is `[client, capability, audience]`:
 | Licensed material never leaks: bodies and summaries beyond the allowance never reach the database, pages, JSON, feeds, sitemaps, the API, events or Search. | `test/licensing.test.js` |
 | Dedupe by canonical URL, content hash and near-duplicate headline; idempotent replays. | `test/ingest.test.js` |
 | Clusters are deterministic and explained; merges and splits are audited and reversible. | `test/clusters.test.js` |
+| The index gate counts independent sources: a single-source story, two items of one Sources source, two sources of one publisher's domain and a report with its syndicated copy are published but noindex and out of the sitemap; two independent sources are indexable; `NEWS_MIN_INDEPENDENT_SOURCES=1` restores the old gate. | `test/indexability.test.js` |
 | Retraction: visible at its URL with the notice, noindex with its reason, out of sitemaps and Search, event emitted, final. | `test/retraction.test.js` |
 | Useful without JavaScript: the whole editorial journey with forms, and public pages complete in HTML. | `test/nojs.test.js` |
 | AI output is a draft that needs a person's review (AI-assisted too); uncited claims dropped; failure makes no text. | `test/ai.test.js` |

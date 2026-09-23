@@ -66,6 +66,13 @@ function load(env = process.env) {
             summaryMaxChars: Math.min(Math.max(int(env.NEWS_SUMMARY_MAX_CHARS, 280), 0), 500),
         },
 
+        // Indexing: how many independent sources (distinct Sources sources, publishers' domains and
+        // outlets, not copies of one report) a story's paragraphs must cite before search engines,
+        // sitemaps and Search may treat it as indexable. Fewer: published, but noindex.
+        indexing: {
+            minIndependentSources: Math.max(int(env.NEWS_MIN_INDEPENDENT_SOURCES, 2), 1),
+        },
+
         // Clustering: the time window a new item may join an existing cluster in.
         clustering: {
             windowMs: int(env.NEWS_CLUSTER_WINDOW_HOURS, 72) * 3600 * 1000,

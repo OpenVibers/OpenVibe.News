@@ -2,8 +2,8 @@
 
 /**
  * Deterministic text helpers for ingestion: URL keys and title keys for dedupe, word shingles for
- * near-duplicate headlines, the terms and named entities clustering compares, and the licensing
- * rule for source summaries. Pure functions: the same input always gives the same output, so every
+ * near-duplicate headlines, the terms and named entities clustering compares, the licensing rule
+ * for source summaries, and which cited sources are independent (the index gate). Pure functions: the same input always gives the same output, so every
  * dedupe and cluster decision can be recomputed and explained.
  */
 
@@ -49,6 +49,59 @@ function urlKey(url) {
 /** The outlet shown when the registry has no name: the URL's host without "www.". */
 function hostOf(url) {
     try { return new URL(String(url)).hostname.toLowerCase().replace(/^www\./, ''); } catch { return null; }
+}
+
+// Second-level labels under a two-letter country code that are not a publisher's own name
+// (bbc.co.uk, abc.net.au): the publisher is the label before them.
+const COUNTRY_SECOND_LEVEL = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'ne', 'or', 'go', 'gob', 'nic', 'mil']);
+
+/**
+ * The publisher's domain of a URL: its host without subdomains (news.example.com and
+ * www.example.com → example.com; news.bbc.co.uk → bbc.co.uk). Deliberately coarse: two sites on
+ * one shared host (two blogs on one platform) count as one publisher, never the other way round.
+ */
+function publisherDomain(url) {
+    const host = hostOf(url);
+    if (!host) return null;
+    if (/^[\d.]+$/.test(host) || host.startsWith('[')) return host;
+    const labels = host.split('.').filter(Boolean);
+    if (labels.length <= 2) return labels.join('.');
+    const n = labels.length;
+    const take = labels[n - 1].length === 2 && COUNTRY_SECOND_LEVEL.has(labels[n - 2]) ? 3 : 2;
+    return labels.slice(-take).join('.');
+}
+
+/**
+ * Independent sources among source items (news_source_items rows): items are one source when they
+ * share any of
+ *   - the OpenVibe.Sources source (source_key: the same feed or registry entry),
+ *   - the publisher's domain of their canonical URL (publisherDomain),
+ *   - the outlet name (folded),
+ *   - the original they duplicate (duplicate_of: the same report syndicated or copied),
+ * and the relation is transitive. → groups of item ids, each group one independent source.
+ */
+function independentSources(items) {
+    const parent = new Map();
+    const find = (k) => { while (parent.get(k) !== k) { parent.set(k, parent.get(parent.get(k))); k = parent.get(k); } return k; };
+    const union = (a, b) => { const x = find(a); const y = find(b); if (x !== y) parent.set(y, x); };
+    for (const it of items) {
+        const node = `item:${it.id}`;
+        if (!parent.has(node)) parent.set(node, node);
+        const domain = publisherDomain(it.canonical_url);
+        const outlet = fold(it.outlet);
+        const keys = [`source:${it.source_key}`, `original:${it.duplicate_of || it.id}`, domain ? `domain:${domain}` : null, outlet ? `outlet:${outlet}` : null].filter(Boolean);
+        for (const k of keys) {
+            if (!parent.has(k)) parent.set(k, k);
+            union(node, k);
+        }
+    }
+    const groups = new Map();
+    for (const it of items) {
+        const root = find(`item:${it.id}`);
+        if (!groups.has(root)) groups.set(root, []);
+        groups.get(root).push(it.id);
+    }
+    return [...groups.values()];
 }
 
 /** Very light stemming: plural and possessive endings, so "rockets" and "rocket" meet. */
@@ -141,4 +194,4 @@ function licensedSummary(summary, { termsNote, licenseNote, maxChars = 280 } = {
     return { summary: `${(at > maxChars * 0.6 ? cut.slice(0, at) : cut).replace(/[\s,;:.-]+$/, '')}…`, basis: 'terms_allow_short_summaries' };
 }
 
-module.exports = { fold, titleKey, urlKey, hostOf, terms, entities, shingles, jaccard, licensedSummary, stem, STOPWORDS };
+module.exports = { fold, titleKey, urlKey, hostOf, publisherDomain, independentSources, terms, entities, shingles, jaccard, licensedSummary, stem, STOPWORDS };

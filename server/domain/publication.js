@@ -7,10 +7,14 @@
  *   - the Search document and the publication events (openvibe-publishing/index-hooks), enqueued
  *     in the same transaction as the change through the SDK outbox
  *
- * News' gate policy: at least one source (citations are the Sources items the published revision
- * cites and that are still live upstream), at least 40 words; a paragraph whose every source was
- * removed upstream counts as an unsupported claim (noindex until an editor revises); a retraction
- * is noindex; AI-generated text is hidden until a person reviews it.
+ * News' gate policy: at least NEWS_MIN_INDEPENDENT_SOURCES (2) independent sources, at least 40
+ * words. The sources counted are the Sources items the published revision's paragraphs cite and
+ * that are still live upstream, grouped by text.independentSources: items from the same Sources
+ * source, the same publisher's domain, the same outlet, or copies of the same original report are
+ * one source. A story on fewer is still published and readable, but noindex ('unsourced'), so it
+ * stays out of sitemaps. A paragraph whose every source was removed upstream counts as an
+ * unsupported claim (noindex until an editor revises); a retraction is noindex; AI-generated text
+ * is hidden until a person reviews it.
  *
  * Search receives ONLY published (not retracted), listable stories. Everything else is a tombstone,
  * so a retraction or an unpublish removes the old copy; a story that was never indexed gets no tombstone.
@@ -18,8 +22,10 @@
 const seo = require('openvibe-publishing/seo');
 const hooks = require('openvibe-publishing/index-hooks');
 const authorship = require('openvibe-publishing/authorship');
+const { independentSources } = require('./text');
 
-const POLICY = Object.freeze({ minWords: 40, requireSources: true, minSources: 1 });
+// minSources counts independent sources; config.indexing.minIndependentSources overrides it.
+const POLICY = Object.freeze({ minWords: 40, requireSources: true, minSources: 2 });
 const OWNER = 'news';
 
 /**
@@ -43,6 +49,7 @@ function disclosure(rec, review) {
 
 function createPublication({ store, config, outbox }) {
     const { db } = store;
+    const policy = Object.freeze({ ...POLICY, minSources: (config.indexing && config.indexing.minIndependentSources) || POLICY.minSources });
     const storyById = db.prepare('SELECT * FROM news_stories WHERE id = ?');
     const itemById = db.prepare('SELECT * FROM news_source_items WHERE id = ?');
     const topicById = db.prepare('SELECT * FROM news_topics WHERE id = ?');
@@ -76,7 +83,8 @@ function createPublication({ store, config, outbox }) {
             for (const n of ns) if (alive(n)) cited.add(n);
             if (!ns.some(alive)) unsupported++;
         }
-        return { citedLive: cited.size, unsupported, live };
+        const groups = independentSources([...cited].map((n) => live.get(n)));
+        return { citedLive: cited.size, independent: groups.length, groups, unsupported, live };
     }
 
     const plain = (rev) => (rev ? `${rev.fields.headline || ''}\n${paragraphsOf(rev).map((p) => p.text).join('\n')}` : '');
@@ -97,13 +105,13 @@ function createPublication({ store, config, outbox }) {
             visibility: 'public',
             canonicalUrl: storyUrl(story),
             text: plain(rev),
-            citationCount: sup.citedLive,
+            citationCount: sup.independent,
             unsupportedClaims: sup.unsupported,
             retracted: (state || story.state) === 'retracted',
             noindex: Boolean(story.noindex),
         };
         if (rec) Object.assign(facts, gateAuthorship(rec, reviewOf(story, rev)));
-        return seo.evaluate(facts, { policy: POLICY, now: store.now() });
+        return seo.evaluate(facts, { policy, now: store.now() });
     }
 
     function topicOf(story) { return story.topic_id ? topicById.get(story.topic_id) : null; }
@@ -193,7 +201,7 @@ function createPublication({ store, config, outbox }) {
     }
 
     return {
-        POLICY, OWNER, abs, storyPath, storyUrl, topicPath, feedId,
+        POLICY: policy, OWNER, abs, storyPath, storyUrl, topicPath, feedId,
         authorshipOf, reviewOf, paragraphsOf, snapshotOf, liveSources, support, decide, topicOf,
         documentFor, syncIndex, snapshot, afterChange, plain,
     };
