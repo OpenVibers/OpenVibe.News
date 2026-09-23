@@ -100,6 +100,15 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.ok(!sent.includes('SECRET-BODY-FOR-AI'), 'no body is ever sent to the model');
         assert.match(sent, /"source_type":"news.article"/);
         assert.strictEqual(t.ctx.stories.get(s2.id).state, 'draft');
+        const edit = await t.get(`/edit/stories/${s2.id}`, { as: t.editor });
+        assert.strictEqual(edit.status, 200, edit.text);
+        assert.match(edit.text, /Ask OpenVibe.AI for a draft summary/);
+        assert.match(edit.text, /is AI-generated \(news.summarize_story\)\. Read it against the sources before approving/);
+        assert.match(edit.text, /What the AI draft could not support/);
+        const csrf = t.csrf(t.editor);
+        const rv = await t.get(`/edit/stories/${s2.id}/review`, { as: t.editor, form: { _csrf: csrf, revision: String(head.revision), decision: 'approved', note: '' } });
+        assert.strictEqual(rv.status, 303, rv.text);
+        assert.strictEqual(t.ctx.store.reviews.latest(s2.id, head.revision).reviewer, t.editor.subject);
     });
 
     await check('a stub-provider run is held (stub_provider) and a failed run makes no text', async () => {

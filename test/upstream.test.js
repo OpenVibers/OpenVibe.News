@@ -83,6 +83,21 @@ const BODY = [
         assert.strictEqual(t.db().prepare("SELECT COUNT(*) AS n FROM news_editorial_flags WHERE kind = 'source_removed'").get().n, 1, 'a removal flags once');
     });
 
+    await check('the editor desk shows the open flags, the pending revision and why it cannot be published', async () => {
+        const desk = await t.get('/edit', { as: t.editor });
+        assert.strictEqual(desk.status, 200);
+        assert.match(desk.text, /source removed \(pending revision 3\)/);
+        const edit = await t.get(`/edit/stories/${story.id}`, { as: t.editor });
+        assert.strictEqual(edit.status, 200, edit.text);
+        assert.match(edit.text, /<h2>Open flags<\/h2>/);
+        assert.match(edit.text, /was prepared by the system because a source was removed upstream/);
+        assert.match(edit.text, /<code>story.source_removed<\/code>/);
+        assert.match(edit.text, /licence withdrawn by the publisher/, 'editors see the removal reason');
+        const prev = await t.get(`/edit/stories/${story.id}/preview?revision=3`, { as: t.editor });
+        assert.strictEqual(prev.status, 200);
+        assert.match(prev.text, /Removed upstream: licence withdrawn/);
+    });
+
     await check('the pending revision (still citing the removed source) cannot be published', async () => {
         r = await t.api(`/stories/${story.id}/publish`, { json: { revision: 3 } });
         assert.strictEqual(r.status, 409);
