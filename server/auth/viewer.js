@@ -6,7 +6,7 @@
  *   { kind: 'anonymous', subject: null, staff: false }
  *   { kind: 'user', subject: 'usr_…'|null, staff, user, token }
  *       A browser with the Network user JWT (ov_token cookie or Bearer). The subject comes from the
- *       token's subject_id claim. role 'admin' makes the viewer staff. X-OV-* headers are ignored.
+ *       token's subject_id claim. staff = the contracts staff map's staff.editorial.manage (ADR-022). X-OV-* headers are ignored.
  *   { kind: 'service', service: 'svc:ai', claims, subject: 'usr_…'|null, origin: 'user'|'ai' }
  *       A first-party service with a Network client-credentials token for audience openvibe.news.
  *       X-OV-Subject names the editor it acts for; X-OV-Origin: ai marks OpenVibe.AI output
@@ -22,8 +22,7 @@ const contracts = require('openvibe-contracts');
 const { extractToken, claimsToUser, decodeJwtPayload } = require('./sso');
 const { checkCapability } = require('./capabilities');
 
-const { ids, serviceAuth, http } = contracts;
-const STAFF_ROLES = new Set(['admin']);
+const { ids, serviceAuth, http, staff: staffMap } = contracts;
 const PRINCIPAL_SUB = /^(svc|app|mod):/;
 const AUDIENCE = 'openvibe.news';
 
@@ -68,7 +67,7 @@ function createViewerResolver({ auth, config, people }) {
         if (!claims || (typeof claims.sub === 'string' && PRINCIPAL_SUB.test(claims.sub))) return null;
         const subject = ids.isSubjectId('user', claims.subject_id) ? claims.subject_id : null;
         if (subject && people) { try { people.rememberClaims(subject, claims); } catch { /* display cache only */ } }
-        return { kind: 'user', subject, staff: STAFF_ROLES.has(claims.role), origin: 'user', user: claimsToUser(claims), token };
+        return { kind: 'user', subject, staff: staffMap.can(claims, 'staff.editorial.manage'), origin: 'user', user: claimsToUser(claims), token };
     }
 
     /** opts.services=false (pages) treats a service token as no identity: pages are for browsers. */
@@ -116,4 +115,4 @@ function guard(cap) {
     };
 }
 
-module.exports = { createViewerResolver, guard, ANONYMOUS, ViewerError, STAFF_ROLES };
+module.exports = { createViewerResolver, guard, ANONYMOUS, ViewerError };

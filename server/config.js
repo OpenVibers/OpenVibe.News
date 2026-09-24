@@ -45,7 +45,7 @@ function load(env = process.env) {
         formSecret: env.NEWS_FORM_SECRET || '',
 
         // Editors: Network subjects (usr_…) who may create, revise, publish and retract stories and
-        // manage clusters. Network admins are editors too (staff).
+        // manage clusters. A product role, not staff; staff with staff.editorial.manage are editors too.
         editors: list(env.NEWS_EDITORS),
 
         // OpenVibe.Sources: the news items News ingests (category=news). Reads need sources.item.read
