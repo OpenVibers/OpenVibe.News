@@ -235,7 +235,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
     function flagEvent(story, flag, traceparent) {
         outbox.emit({
             event_type: 'news.story.flagged', actor: flag.created_by === 'svc:news' ? { type: 'service', id: 'news' } : actorRef(flag.created_by),
-            visibility: 'internal', priority: flag.kind === 'source_removed' ? 'important' : 'normal',
+            visibility: 'internal', priority: flag.kind === 'source_removed' ? 'important' : 'low',   // the envelope allows important|low; 'normal' was refused by Events
             subject: { type: 'story', id: story.id, revision: flag.pending_revision || story.published_revision || 0 },
             payload: { flag_id: flag.id, kind: flag.kind, status: flag.status, source_item_id: flag.source_item_id, pending_revision: flag.pending_revision, published_revision: story.published_revision },
         }, { traceparent });
