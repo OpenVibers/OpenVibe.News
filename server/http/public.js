@@ -18,6 +18,7 @@
  * built for a viewer. Robots come from the gate: a retracted story is noindex with its reason.
  */
 const express = require('express');
+const frame = require('openvibe-shared/frame');
 const rateLimit = require('express-rate-limit');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
@@ -87,6 +88,12 @@ function createPublicRoutes(ctx) {
         }, { cacheable: true });
     }
 
+    // What shipped on OpenVibe.News: the shared update log every OpenVibe site has.
+    router.get('/updates', (req, res) => send(req, res, 200, {
+        title: 'What shipped on OpenVibe.News', description: 'Every change deployed to OpenVibe.News, newest first.',
+        decision: pageDecision('/updates'), canonical: `${config.baseUrl}/updates`,
+        body: frame.updatesBody({ service: 'news', siteName: 'OpenVibe.News' }) + frame.shippedScript(),
+    }, { cacheable: true }));
     router.get('/', wrap((req, res) => listing(req, res, {})));
 
     router.get('/topics', wrap(async (req, res) => {
