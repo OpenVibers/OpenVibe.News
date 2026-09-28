@@ -224,7 +224,7 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
 
 - **Packages** (pinned by release tarball): `openvibe-publishing` v0.4.0 (revisions, citations,
   authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.49.0,
-  `openvibe-shared` v1.22.0 (chrome, app icon, footer, legal, release, metrics, ready, seo),
+  `openvibe-shared` v1.25.0 (chrome, app icon, footer, legal, release, metrics, ready, seo),
   `openvibe-sdk` v0.12.0 (events outbox and inbox, webhook signatures v2, service tokens, per-actor
   limits).
 - **OpenVibe.Sources** (4720): `sources.item.read`; optionally `sources.source.read` (outlet
