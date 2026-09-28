@@ -198,7 +198,7 @@ five minutes and are never built for a viewer.
 | `news.story.retracted` | public for a listable story; the retraction note |
 | `news.index_document.upserted` / `.deleted` | `search.index-document@1` documents (provenance: the Sources items and the AI run) and tombstones, with a monotonic index revision |
 
-### Capabilities (registered in openvibe-contracts v0.21.0)
+## Capabilities (registered in openvibe-contracts v0.21.0)
 
 Service tokens use audience `openvibe.news`, one capability per route; the editor the service acts
 for goes in `X-OV-Subject` and must be an editor:
@@ -214,12 +214,19 @@ Grants for these ids are decided with the contracts library's matching rule
 openvibe-contracts v0.21.0; `docs/capabilities-proposal/` and `docs/service-manifest-proposal.json`
 are the proposals they were released from.
 
+Called elsewhere, as the service principal `news`: `sources.item.read` and optionally
+`sources.source.read` (Sources), `events.event.publish` and `events.subscription.manage` (Events),
+`identity.subject.resolve` (Network), `community.comment.write` and `community.comment.moderate`
+(Community) and, only with `OV_AI_INTERNAL_URL`, `ai.run.create` (AI). The list with audiences is
+under [Grants the Network must hold](#grants-the-network-must-hold).
+
 ## Depends on
 
-- **Packages** (pinned by release tarball): `openvibe-publishing` v0.2.1 (revisions, citations,
-  authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.33.0,
-  `openvibe-shared` v1.5.1 (chrome, app icon, footer, legal, release, metrics, ready, seo),
-  `openvibe-sdk` v0.5.0 (events outbox and inbox, webhook signatures v2, service tokens).
+- **Packages** (pinned by release tarball): `openvibe-publishing` v0.4.0 (revisions, citations,
+  authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.49.0,
+  `openvibe-shared` v1.22.0 (chrome, app icon, footer, legal, release, metrics, ready, seo),
+  `openvibe-sdk` v0.12.0 (events outbox and inbox, webhook signatures v2, service tokens, per-actor
+  limits).
 - **OpenVibe.Sources** (4720): `sources.item.read`; optionally `sources.source.read` (outlet
   names and source health; without it the outlet is the URL's host).
 - **OpenVibe.Events** (4300): `events.event.publish`; `events.subscription.manage` to create the
@@ -298,6 +305,8 @@ call the service live.
 
 ## Security and threat review
 
+Reporting a vulnerability: [SECURITY.md](SECURITY.md).
+
 - **Identity:** only verified Network JWTs (offline RS256) and service tokens for audience
   `openvibe.news`. A bad service token is refused, never downgraded. Identity never comes from a
   body or query; `X-OV-*` headers are ignored for browsers. AI deliveries can only write drafts.
@@ -362,6 +371,15 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4820 (set OV_OAUTH
 ```
 
 ## Deploy (for the lead)
+
+Production deploys with `sudo ovhost deploy news` on the host (strategy `git-checkout`: fetch,
+fast-forward `/opt/openvibe.news`, install on a lockfile change, restart, wait for `/api/ready`).
+The unit is `openvibe-news.service` on `127.0.0.1:4820`, the env file `/etc/openvibe/news.env`.
+Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
+restart; afterwards `sudo ovhost rollback news --to <sha>`. Nothing blocks a rollback: the schema
+code only adds tables and columns.
+
+First install (done once; kept for a rebuild):
 
 1. **Code and config:** put the code at `/opt/openvibe.news` and run `npm ci --omit=dev` on Node 22.
    Create `/etc/openvibe/news.env` (0600) from `.env.example` with `OV_OAUTH_CLIENT_SECRET`,
