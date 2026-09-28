@@ -72,11 +72,16 @@ function itemDto(it) {
 }
 
 function createApi(ctx) {
-    const { config, stories, clusters, publication, reading, topics, ingest, viewers } = ctx;
+    const { config, stories, clusters, publication, reading, topics, ingest, viewers, limits } = ctx;
     const router = express.Router();
     router.use(cors(config.apiCorsOrigins));
     router.use(viewers.middleware());
     router.use((req, res, next) => { privateNoStore(res); res.set('X-Robots-Tag', 'noindex'); next(); });
+    // Per-actor limits (http/actor-limits.js), once req.viewer is resolved: a signed-in person's or an
+    // app's reads take the defaults (signed-out reads keep the per-address limit only); each write
+    // below names its budget after its capability guard, before its body is read.
+    router.use(limits.reads('news.read'));
+    const B = (name) => limits.budget(name);
 
     const tp = (req) => ({ traceparent: req.ov && req.ov.traceparent });
     /** Reads for editors: a service passed its capability guard; a browser must be an editor. */
@@ -117,7 +122,7 @@ function createApi(ctx) {
 
     router.get('/topics', run(() => ({ topics: topics.list().map((t) => ({ id: t.id, slug: t.slug, name: t.name, description: t.description, url: publication.abs(publication.topicPath(t)) })) })));
 
-    router.post('/topics', guard('news.topic.manage'), jsonBody, run((req) => {
+    router.post('/topics', guard('news.topic.manage'), B('news.topic.manage'), jsonBody, run((req) => {
         access.requireEditor(config, req.viewer);
         const b = req.body || {};
         const r = topics.create({ name: b.name, slug: b.slug, description: b.description });
@@ -149,7 +154,7 @@ function createApi(ctx) {
         return { published: reading.storyJson(await reading.storyModel(story)) };
     }));
 
-    router.post('/stories', guard('news.story.create'), jsonBody, run((req) => {
+    router.post('/stories', guard('news.story.create'), B('news.story.create'), jsonBody, run((req) => {
         const b = req.body || {};
         const out = stories.create(req.viewer, { cluster: b.cluster || b.cluster_id, headline: b.headline, topic: b.topic, slug: b.slug, body: b.body, paragraphs: b.paragraphs }, tp(req));
         return { story: storyDto(out.story), revision: out.revision ? out.revision.number : null };
@@ -167,52 +172,53 @@ function createApi(ctx) {
         if (!rev) throw new ApiError(404, 'revision.not_found', 'No such revision');
         return { revision: rev, citations: ctx.store.citations.forRevision(story.id, rev.number), problems: stories.problems(story, rev) };
     }));
-    router.get('/stories/:id/diff', guard('news.story.read'), run((req) => {
+    router.get('/stories/:id/diff', guard('news.story.read'), limits.readBudget('news.story.diff'), run((req) => {
         editorRead(req);
         return { diff: stories.diff(mustStory(req), parseInt(req.query.from, 10), parseInt(req.query.to, 10), req.query.mode) };
     }));
 
-    const write = (method, path, capGuard, fn, status = 200) => router[method](path, capGuard, jsonBody, run(async (req) => fn(req, mustStory(req), req.body || {}), status));
+    // guards: the capability guard, then the route's per-actor budget (both before the body is read).
+    const write = (method, path, guards, fn, status = 200) => router[method](path, guards, jsonBody, run(async (req) => fn(req, mustStory(req), req.body || {}), status));
 
-    write('post', '/stories/:id/revisions', guard('news.story.revise'), (req, story, b) => {
+    write('post', '/stories/:id/revisions', [guard('news.story.revise'), B('news.story.revise')], (req, story, b) => {
         const out = stories.revise(req.viewer, story, {
             headline: b.headline, body: b.body, paragraphs: b.paragraphs, expectedRevision: b.expected_revision ?? b.expectedRevision,
             topic: b.topic, noindex: b.noindex, message: b.message, authorship: b.authorship, gaps: b.gaps,
         }, tp(req));
         return { revision: out.revision.number, created: out.created, story: storyDto(out.story) };
     }, 201);
-    write('post', '/stories/:id/ai-drafts', guard('news.story.revise'), async (req, story, b) => {
+    write('post', '/stories/:id/ai-drafts', [guard('news.story.revise'), B('news.story.ai_draft')], async (req, story, b) => {
         const out = await stories.aiDraft(req.viewer, story, String(b.workflow || 'news.summarize_story'), tp(req));
         return { revision: out.revision.number, created: out.created, story: storyDto(out.story) };
     }, 201);
-    write('post', '/stories/:id/publish', guard('news.story.publish'), (req, story, b) => {
+    write('post', '/stories/:id/publish', [guard('news.story.publish'), B('news.story.publish')], (req, story, b) => {
         const out = stories.publish(req.viewer, story, { revision: b.revision, correction: b.correction }, tp(req));
         return { changed: out.changed, resolved_flags: out.resolved || [], story: storyDto(out.story) };
     });
-    write('post', '/stories/:id/unpublish', guard('news.story.publish'), (req, story) => {
+    write('post', '/stories/:id/unpublish', [guard('news.story.publish'), B('news.story.publish')], (req, story) => {
         const out = stories.unpublish(req.viewer, story, tp(req));
         return { changed: out.changed, story: storyDto(out.story) };
     });
-    write('post', '/stories/:id/retract', guard('news.story.retract'), (req, story, b) => {
+    write('post', '/stories/:id/retract', [guard('news.story.retract'), B('news.story.publish')], (req, story, b) => {
         const out = stories.retract(req.viewer, story, { note: b.note }, tp(req));
         return { changed: out.changed, story: storyDto(out.story) };
     });
-    router.post('/stories/:id/reviews', jsonBody, run((req) => {
+    router.post('/stories/:id/reviews', B('news.story.publish'), jsonBody, run((req) => {
         const story = mustStory(req);
         const b = req.body || {};
         return { review: stories.review(req.viewer, story, { revision: b.revision, decision: b.decision, note: b.note }, tp(req)) };
     }, 201));
-    write('post', '/stories/:id/flags', guard('news.story.revise'), (req, story, b) => ({ flag: stories.addFlag(req.viewer, story, { kind: b.kind, note: b.note }) }), 201);
-    write('post', '/stories/:id/sources', guard('news.source.attach'), (req, story, b) => {
+    write('post', '/stories/:id/flags', [guard('news.story.revise'), B('news.story.annotate')], (req, story, b) => ({ flag: stories.addFlag(req.viewer, story, { kind: b.kind, note: b.note }) }), 201);
+    write('post', '/stories/:id/sources', [guard('news.source.attach'), B('news.source.attach')], (req, story, b) => {
         const out = stories.attach(req.viewer, story, { item: b.item || b.item_id });
         return { n: out.n, created: out.created, item: itemDto(out.item) };
     }, 201);
-    write('delete', '/stories/:id/sources/:item', guard('news.source.attach'), (req, story) => stories.detach(req.viewer, story, req.params.item));
-    write('post', '/stories/:id/perspectives', guard('news.perspective.update'), (req, story, b) => ({ perspective: stories.addPerspective(req.viewer, story, { label: b.label, description: b.description }) }), 201);
-    write('delete', '/stories/:id/perspectives/:pid', guard('news.perspective.update'), (req, story) => stories.removePerspective(req.viewer, story, req.params.pid));
-    write('put', '/stories/:id/sources/:item/perspective', guard('news.perspective.update'), (req, story, b) => stories.assignPerspective(req.viewer, story, req.params.item, b.perspective || null));
-    write('post', '/stories/:id/timeline', guard('news.timeline.update'), (req, story, b) => ({ entry: stories.addTimeline(req.viewer, story, { occurredOn: b.occurred_on ?? b.occurredOn, text: b.text, source: b.source }) }), 201);
-    write('delete', '/stories/:id/timeline/:eid', guard('news.timeline.update'), (req, story) => stories.removeTimeline(req.viewer, story, req.params.eid));
+    write('delete', '/stories/:id/sources/:item', [guard('news.source.attach'), B('news.source.attach')], (req, story) => stories.detach(req.viewer, story, req.params.item));
+    write('post', '/stories/:id/perspectives', [guard('news.perspective.update'), B('news.story.annotate')], (req, story, b) => ({ perspective: stories.addPerspective(req.viewer, story, { label: b.label, description: b.description }) }), 201);
+    write('delete', '/stories/:id/perspectives/:pid', [guard('news.perspective.update'), B('news.story.annotate')], (req, story) => stories.removePerspective(req.viewer, story, req.params.pid));
+    write('put', '/stories/:id/sources/:item/perspective', [guard('news.perspective.update'), B('news.story.annotate')], (req, story, b) => stories.assignPerspective(req.viewer, story, req.params.item, b.perspective || null));
+    write('post', '/stories/:id/timeline', [guard('news.timeline.update'), B('news.story.annotate')], (req, story, b) => ({ entry: stories.addTimeline(req.viewer, story, { occurredOn: b.occurred_on ?? b.occurredOn, text: b.text, source: b.source }) }), 201);
+    write('delete', '/stories/:id/timeline/:eid', [guard('news.timeline.update'), B('news.story.annotate')], (req, story) => stories.removeTimeline(req.viewer, story, req.params.eid));
 
     // ── Clusters, items, ingestion ──────────────────────────
 
@@ -227,18 +233,18 @@ function createApi(ctx) {
         if (!c) throw new ApiError(404, 'cluster.not_found', 'No such cluster');
         return { cluster: clusterDto(c, { full: true }) };
     }));
-    router.post('/clusters/audit/:auditId/reverse', guard('news.cluster.manage'), jsonBody, run((req) => {
+    router.post('/clusters/audit/:auditId/reverse', guard('news.cluster.manage'), B('news.cluster.manage'), jsonBody, run((req) => {
         access.requireEditor(config, req.viewer);
         const out = clusters.reverse(req.viewer, req.params.auditId, { reason: (req.body || {}).reason });
         return { audit: out.audit, clusters: out.clusters.map((c) => clusterDto(c)) };
     }));
-    router.post('/clusters/:id/merge', guard('news.cluster.manage'), jsonBody, run((req) => {
+    router.post('/clusters/:id/merge', guard('news.cluster.manage'), B('news.cluster.manage'), jsonBody, run((req) => {
         access.requireEditor(config, req.viewer);
         const b = req.body || {};
         const out = clusters.merge(req.viewer, req.params.id, b.other, { reason: b.reason });
         return { cluster: clusterDto(out.cluster, { full: true }), audit: out.audit };
     }));
-    router.post('/clusters/:id/split', guard('news.cluster.manage'), jsonBody, run((req) => {
+    router.post('/clusters/:id/split', guard('news.cluster.manage'), B('news.cluster.manage'), jsonBody, run((req) => {
         access.requireEditor(config, req.viewer);
         const b = req.body || {};
         const out = clusters.split(req.viewer, req.params.id, b.items, { reason: b.reason });

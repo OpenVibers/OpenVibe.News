@@ -9,6 +9,9 @@
  *   t.community.threads / .calls             // the Community mock (comment threads)
  *   t.deliver(event)                         // a signed Events webhook delivery
  *   t.clock.advance(ms)
+ *
+ * opts: env (overrides), ai (true: News talks to the AI mock), clock, log (News' logger; default quiet),
+ * limitsNow (the per-actor limiter's clock; default the wall clock).
  */
 const fs = require('fs');
 const os = require('os');
@@ -52,7 +55,7 @@ async function boot(opts = {}) {
     let built = null;
     async function start() {
         const config = configLib.load(env);
-        built = createApp({ config, now: clock.now, log: quiet });
+        built = createApp({ config, now: clock.now, log: opts.log || quiet, limitsNow: opts.limitsNow });
         await built.ctx.auth.ensureKey();
         server = await new Promise((resolve) => { const s = http.createServer(built.app); s.listen(0, '127.0.0.1', () => resolve(s)); });
         t.base = `http://127.0.0.1:${server.address().port}`;

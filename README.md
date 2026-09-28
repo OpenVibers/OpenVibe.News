@@ -315,13 +315,43 @@ call the service live.
 - **Fabrication:** no seeded or generated stories, ratings or dates; dates come from sources or an
   editor citing one; empty feeds use a real time; JSON-LD omits unknown fields.
 - **Abuse:** rate limits on `/auth`, `/edit`, `/clusters`, `/api/v1` and the comment form, in
-  Express and in the nginx reference.
+  Express and in the nginx reference, and per-actor limits (below).
 - **Comments:** Community owns the text and its moderation; News renders it through the same
   auto-escaping and stores only the thread id. The comment form needs a signed-in member and the
   form token, is rate-limited, and is refused for a story that is not open for discussion.
 - **Known gaps:** no per-story Media attachments; the Sources registry name is cached and not
   refreshed after the first successful read; the Network does not hold News' two Community grants
   yet, so story pages say comments are unavailable until they are added.
+
+### Per-actor limits
+
+`/api/v1`, the editor desk and the comment form also limit who calls them, once `req.viewer` is
+resolved and a route's capability guard passed, before any work (for a write, before its body is
+read): `server/http/actor-limits.js`, openvibe-sdk/limits, roadmap WS-R task 4. Counted: a person as
+`user:usr_…` (their own token or cookie, a first-party service naming them in `X-OV-Subject`, or an
+app's `on_behalf_of`); a service or app acting as itself by its principal; anyone else by address.
+Signed-out reads keep only the per-address limit (many readers share a carrier or campus address),
+and a first-party service reading for itself is not counted on reads. Past a limit: `429`
+problem+json `rate_limited` with `Retry-After`, one log line and `news_rate_limited_total{limit,window}`.
+A desk form and the API route that do the same thing share one budget.
+
+| Routes (API and desk form) | Per caller, a minute / an hour |
+|---|---|
+| Signed-in API reads, desk pages | `NEWS_LIMITS_MINUTE` / `NEWS_LIMITS_HOUR` (120 / 3000) |
+| Topic create | 10 / 60 |
+| Story create (`POST /stories`, `/clusters/:id/stories`) | 30 / 300 |
+| Revisions | 30 / 600 |
+| AI drafts (`POST /stories/:id/ai-drafts`, the desk's AI button) | 5 / 60 |
+| Publish, unpublish, retract, reviews | 30 / 300 |
+| Attach and detach a source | 30 / 300 |
+| Perspectives, timeline, flags | 60 / 600 |
+| Cluster merge, split, reverse | 30 / 300 |
+| Pull now (`POST /edit/pull`) | 2 / 20 |
+| Comment (`POST /stories/:slug/comments`, signed-in) | 20 / 300 |
+| Diffs (API and desk) | 30 / 600 |
+
+Never limited per actor: `/api/health`, `/api/ready`, `/release.json`, `/metrics`, sign-in, the public
+pages and feeds, and the signed Events deliveries at `/internal/events`. `test/actor-limits.test.js`.
 
 ## Development
 

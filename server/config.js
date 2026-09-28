@@ -28,6 +28,12 @@ function load(env = process.env) {
         // Public origin: canonical URLs, feeds, sitemaps and JSON-LD are built from it.
         baseUrl,
         trustProxy: env.TRUST_PROXY != null ? Number(env.TRUST_PROXY) : 2,
+        // Per-actor limits (server/http/actor-limits.js, roadmap WS-R task 4): the API reads one caller
+        // may make per minute and per hour. Writes, AI drafts and pulls set tighter numbers there.
+        limits: {
+            minute: Math.max(1, int(env.NEWS_LIMITS_MINUTE, 120)),
+            hour: Math.max(1, int(env.NEWS_LIMITS_HOUR, 3000)),
+        },
 
         dbPath: env.NEWS_DB_PATH || './data/news.db',
 

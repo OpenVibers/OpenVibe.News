@@ -198,7 +198,8 @@ function createPublicRoutes(ctx) {
         return renderStory(req, res, { story });
     }));
 
-    router.post('/stories/:slug/comments', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false }), express.urlencoded({ extended: false, limit: '32kb' }), wrap(async (req, res) => {
+    // Per address (20 a minute), then per signed-in person (http/actor-limits.js) before the form is read.
+    router.post('/stories/:slug/comments', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false }), ctx.limits.signedIn('news.discussion.comment'), express.urlencoded({ extended: false, limit: '32kb' }), wrap(async (req, res) => {
         const story = stories.bySlug(req.params.slug);
         if (!story || !story.published_revision || (story.state !== 'published' && story.state !== 'retracted')) return notFound(req, res);
         const path = publication.storyPath(story);
