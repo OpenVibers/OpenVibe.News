@@ -13,7 +13,7 @@
  *
  * Request metrics come from openvibe-shared/metrics in app.js; content counts are not metrics.
  */
-const { createReadiness } = require('openvibe-shared/ready');
+const { createReadiness, skip } = require('openvibe-shared/ready');
 const { CHARTER_TABLES } = require('./db');
 
 function createNewsReadiness({ store, auth, outbox, ingest, config, release = null }) {
@@ -56,7 +56,8 @@ function createNewsReadiness({ store, auth, outbox, ingest, config, release = nu
                 check: () => {
                     const last = ingest.lastPull();
                     const off = !config.sources.pullIntervalMs || !config.worker.enabled;
-                    if (!last) return off ? { ok: true, detail: { pull: 'off' } } : 'no pull from OpenVibe.Sources has run yet';
+                    // Pull switched off and never run: nothing verified, so skipped, never ok (WS-Q task 7).
+                    if (!last) return off ? skip('pull off (NEWS_PULL_INTERVAL_MS=0 or NEWS_WORKER=off)', { pull: 'off' }) : 'no pull from OpenVibe.Sources has run yet';
                     if (last.state !== 'ok') return `last pull failed (${last.error_code}): ${last.detail}`;
                     return { ok: true, detail: { cursor: last.cursor_after, at: new Date(last.at).toISOString() } };
                 },
