@@ -226,7 +226,7 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
 - **Packages** (pinned by release tarball): `openvibe-publishing` v1.0.0 (async PostgreSQL stores: revisions,
   citations, authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.76.0,
-  `openvibe-shared` v1.25.0 (Frame, app icon, footer, legal, release, metrics, ready, seo),
+  `openvibe-shared` v1.27.0 (Frame, app icon, footer, legal, release, metrics, ready, seo),
   `openvibe-sdk` v0.20.0 (db with after-commit hooks, PostgreSQL events outbox and inbox, webhook signatures v2,
   service tokens, per-actor limits, testing).
 - **OpenVibe.Sources** (4720): `sources.item.read`; optionally `sources.source.read` (outlet
