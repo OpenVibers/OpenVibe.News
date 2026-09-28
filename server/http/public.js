@@ -69,7 +69,7 @@ function createPublicRoutes(ctx) {
     async function listing(req, res, { topic = null }) {
         const page = pageNumber(req);
         const path = topic ? publication.topicPath(topic) : '/';
-        const { total, stories: rows } = stories.listPublished({ topicId: topic ? topic.id : null, limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
+        const { total, stories: rows } = await stories.listPublished({ topicId: topic ? topic.id : null, limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
         const items = await reading.listItems(rows);
@@ -85,7 +85,7 @@ function createPublicRoutes(ctx) {
             jsonLd: topic
                 ? [seo.structuredData.breadcrumbs(crumbs.map((c) => ({ name: c.name, url: c.url ? publication.abs(c.url) : canonical })))]
                 : [{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'OpenVibe.News', url: publication.abs('/') }],
-            body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs }) : pages.home({ items, pager, topics: topics.list(), feeds }),
+            body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs }) : pages.home({ items, pager, topics: await topics.list(), feeds }),
         }, { cacheable: true });
     }
 
@@ -95,16 +95,16 @@ function createPublicRoutes(ctx) {
         decision: pageDecision('/updates'), canonical: `${config.baseUrl}/updates`,
         body: frame.updatesBody({ service: 'news', siteName: 'OpenVibe.News' }) + `<script src="${ovServe.url('shipped.js')}" defer></script>`,
     }, { cacheable: true }));
-    router.get('/', wrap((req, res) => listing(req, res, {})));
+    router.get('/', wrap(async (req, res) => await listing(req, res, {})));
 
     router.get('/topics', wrap(async (req, res) => {
-        send(req, res, 200, { title: 'Topics', description: 'Topics on OpenVibe.News.', decision: pageDecision('/topics'), canonical: publication.abs('/topics'), body: pages.topicsIndex({ topics: topics.list() }) }, { cacheable: true });
+        send(req, res, 200, { title: 'Topics', description: 'Topics on OpenVibe.News.', decision: pageDecision('/topics'), canonical: publication.abs('/topics'), body: pages.topicsIndex({ topics: await topics.list() }) }, { cacheable: true });
     }));
 
     router.get('/topics/:slug', wrap(async (req, res) => {
-        const topic = topics.bySlug(req.params.slug);
+        const topic = await topics.bySlug(req.params.slug);
         if (!topic || topic.status !== 'active') return notFound(req, res);
-        return listing(req, res, { topic });
+        return await listing(req, res, { topic });
     }));
 
     // ── Feeds (published stories only, never viewer-dependent) ─
@@ -123,15 +123,15 @@ function createPublicRoutes(ctx) {
         if (kind === 'json') return res.type('application/feed+json').send(JSON.stringify(seo.jsonFeed({ title, link, feedUrl, description, language: 'en' }, items)));
         const listed = items.filter((i) => i.decision.listable);
         // An empty Atom feed still needs <updated>: the time the topic (or News' topic list) was set up, a real time.
-        const updated = listed.length ? null : new Date(topic ? topic.updated_at : (store.db.prepare('SELECT MIN(created_at) AS t FROM news_topics').get().t || store.now())).toISOString();
+        const updated = listed.length ? null : new Date(topic ? topic.updated_at : ((await store.db.prepare('SELECT MIN(created_at) AS t FROM news_topics').get()).t || store.now())).toISOString();
         return res.type('application/atom+xml').send(seo.atomFeed({ title, link, feedUrl, id: `tag:openvibe.news,2026:${topic ? `topic/${topic.id}` : 'all'}`, subtitle: description, ...(updated ? { updated } : {}) }, items));
     }
     for (const f of FEEDS) {
-        router.get(`/${f.file}`, wrap((req, res) => feed(req, res, f.type, null)));
-        router.get(`/topics/:slug/${f.file}`, wrap((req, res) => {
-            const topic = topics.bySlug(req.params.slug);
+        router.get(`/${f.file}`, wrap(async (req, res) => await feed(req, res, f.type, null)));
+        router.get(`/topics/:slug/${f.file}`, wrap(async (req, res) => {
+            const topic = await topics.bySlug(req.params.slug);
             if (!topic || topic.status !== 'active') return notFound(req, res);
-            return feed(req, res, f.type, topic);
+            return await feed(req, res, f.type, topic);
         }));
     }
 
@@ -139,7 +139,7 @@ function createPublicRoutes(ctx) {
 
     /** The story's Community thread as the page shows it: { state: ok|closed|off|unavailable, … }. */
     async function commentsFor(req, story, headline) {
-        const st = discussion.status(story);
+        const st = await discussion.status(story);
         if (!st.open) return { state: 'closed', reason: st.reason };
         if (!community.enabled) return { state: 'off' };
         try {
@@ -159,7 +159,7 @@ function createPublicRoutes(ctx) {
         const isEditor = access.isEditor(config, req.viewer);
         const m = await reading.storyModel(story, { rev, editorView: preview && isEditor });
         const group = ['outlet', 'perspective'].includes(req.query.group) ? req.query.group : 'number';
-        const decision = preview ? publication.decide(story, m.rev, { state: 'draft' }) : m.decision;
+        const decision = preview ? await publication.decide(story, m.rev, { state: 'draft' }) : m.decision;
         const crumbs = [{ name: 'OpenVibe.News', url: '/' }, ...(m.topic ? [{ name: m.topic.name, url: publication.topicPath(m.topic) }] : []), { name: m.headline }];
         const cacheable = !preview && (story.state === 'published' || story.state === 'retracted');
         const comments = preview ? null : await commentsFor(req, story, m.headline);
@@ -185,7 +185,7 @@ function createPublicRoutes(ctx) {
     router.get('/stories/:slug', wrap(async (req, res) => {
         const asJson = req.params.slug.endsWith('.json');
         const slug = asJson ? req.params.slug.slice(0, -5) : req.params.slug;
-        const story = stories.bySlug(slug);
+        const story = await stories.bySlug(slug);
         if (!story || !story.published_revision || (story.state !== 'published' && story.state !== 'retracted')) {
             if (story && story.state === 'unpublished') return messagePage(req, res, 410, 'Gone', 'This story was unpublished.', { href: '/', label: 'OpenVibe.News' });
             return notFound(req, res);
@@ -195,23 +195,23 @@ function createPublicRoutes(ctx) {
             cacheHeaders(res, { cacheable: req.viewer.kind === 'anonymous', robots: m.decision.robots });
             return res.json(reading.storyJson(m));
         }
-        return renderStory(req, res, { story });
+        return await renderStory(req, res, { story });
     }));
 
     // Per address (20 a minute), then per signed-in person (http/actor-limits.js) before the form is read.
     router.post('/stories/:slug/comments', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false }), ctx.limits.signedIn('news.discussion.comment'), express.urlencoded({ extended: false, limit: '32kb' }), wrap(async (req, res) => {
-        const story = stories.bySlug(req.params.slug);
+        const story = await stories.bySlug(req.params.slug);
         if (!story || !story.published_revision || (story.state !== 'published' && story.state !== 'retracted')) return notFound(req, res);
         const path = publication.storyPath(story);
         if (req.viewer.kind !== 'user' || !req.viewer.subject) return res.redirect(303, `/auth/login?next=${encodeURIComponent(path)}`);
         if (!checkCsrf(config, req.viewer, req.body && req.body._csrf)) return messagePage(req, res, 403, 'Form expired', 'Reload the story and try again.', { href: path, label: 'Back to the story' });
-        if (!discussion.status(story).open) return messagePage(req, res, 409, 'Comments are closed', 'This story does not take comments.', { href: path, label: 'Back to the story' });
+        if (!(await discussion.status(story)).open) return messagePage(req, res, 409, 'Comments are closed', 'This story does not take comments.', { href: path, label: 'Back to the story' });
         if (!community.enabled) return messagePage(req, res, 503, 'Comments are unavailable', 'Comments are not connected on this server.', { href: path, label: 'Back to the story' });
         const message = String((req.body && req.body.message) || '').trim();
         if (!message) return res.redirect(303, `${path}#comments`);
         if (message.length > 5000) return messagePage(req, res, 422, 'Comment too long', 'A comment is at most 5000 characters.', { href: path, label: 'Back to the story' });
         try {
-            const rev = store.revisions.get(story.id, story.published_revision);
+            const rev = await store.revisions.get(story.id, story.published_revision);
             const threadId = await community.threadFor(story, rev && rev.fields.headline, req.ov);
             if (!threadId) throw new Error('no thread');
             await community.comment(threadId, req.viewer.subject, { message }, req.ov);

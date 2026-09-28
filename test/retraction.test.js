@@ -18,7 +18,7 @@ const BODY = [
     const t = await boot();
     const reports = launchReports(t.sources);
     await t.pull();
-    const clusterId = t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).cluster_id;
+    const clusterId = (await t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id)).cluster_id;
     let r = await t.api('/stories', { json: { cluster: clusterId, headline: 'Europa Clipper heads for Jupiter', topic: 'space', body: BODY } });
     const story = r.json().story;
     await t.api(`/stories/${story.id}/publish`, { json: {} });
@@ -55,10 +55,10 @@ const BODY = [
 
     await check('out of sitemaps and Search (tombstone), labelled in listings and feeds, event emitted', async () => {
         assert.doesNotMatch((await t.get('/sitemaps/stories.xml')).text, new RegExp(story.slug));
-        const del = t.events('news.index_document.deleted');
+        const del = await t.events('news.index_document.deleted');
         assert.strictEqual(del.length, 1);
         assert.strictEqual(del[0].payload.id, story.id);
-        const ev = t.events('news.story.retracted');
+        const ev = await t.events('news.story.retracted');
         assert.strictEqual(ev.length, 1);
         assert.strictEqual(ev[0].payload.publication_state, 'retracted');
         assert.ok(ev[0].payload.note.startsWith('The launch date'));

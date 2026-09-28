@@ -46,23 +46,23 @@ async function storyOn(t, headline, items) {
     const copy = S.addItem({ source_key: 'beta-daily', title: 'Water agency says two new treatment plants will open next spring', url: 'https://beta.example/b/syndicated-water' });
     const beta = S.addItem({ source_key: 'beta-daily', title: 'Budget vote clears way for valley water projects', url: 'https://beta.example/b/budget-vote' });
     await t.pull();
-    const row = (it) => t.db().prepare('SELECT * FROM news_source_items WHERE sources_item_id = ?').get(it.id);
+    const row = async (it) => await t.db().prepare('SELECT * FROM news_source_items WHERE sources_item_id = ?').get(it.id);
     const sitemap = async () => (await t.get('/sitemaps/stories.xml')).text;
-    const indexEvent = (story) => t.events('news.index_document.upserted').filter((e) => e.payload.id === story.id).pop();
+    const indexEvent = async (story) => (await t.events('news.index_document.upserted')).filter((e) => e.payload.id === story.id).pop();
 
     await check('independence is concrete: same Sources source, same publisher domain, same outlet or a copy of one report count once', async () => {
         assert.strictEqual(text.publisherDomain('https://tech.thepaper.example/x'), 'thepaper.example');
         assert.strictEqual(text.publisherDomain('https://news.bbc.co.uk/x'), 'bbc.co.uk');
         assert.strictEqual(text.publisherDomain('https://www.bbc.co.uk/x'), 'bbc.co.uk');
-        assert.strictEqual(row(copy).status, 'duplicate', 'the syndicated copy is a near-duplicate of the Alpha report');
-        assert.strictEqual(row(copy).duplicate_of, row(wire).id);
-        const n = (items) => text.independentSources(items.map(row)).length;
-        assert.strictEqual(n([feed1, feed2]), 1);
-        assert.strictEqual(n([world, tech]), 1);
-        assert.strictEqual(n([wire, copy]), 1);
-        assert.strictEqual(n([wire, copy, beta]), 1, 'the copy ties Beta Daily to the Alpha report: still one');
-        assert.strictEqual(n([solo, wire]), 2);
-        assert.strictEqual(n([solo, feed1, world, wire]), 4);
+        assert.strictEqual((await row(copy)).status, 'duplicate', 'the syndicated copy is a near-duplicate of the Alpha report');
+        assert.strictEqual((await row(copy)).duplicate_of, (await row(wire)).id);
+        const n = async (items) => text.independentSources(await Promise.all(items.map(row))).length;
+        assert.strictEqual(await n([feed1, feed2]), 1);
+        assert.strictEqual(await n([world, tech]), 1);
+        assert.strictEqual(await n([wire, copy]), 1);
+        assert.strictEqual(await n([wire, copy, beta]), 1, 'the copy ties Beta Daily to the Alpha report: still one');
+        assert.strictEqual(await n([solo, wire]), 2);
+        assert.strictEqual(await n([solo, feed1, world, wire]), 4);
     });
 
     await check('a single-source story is published and readable but noindex, and absent from the sitemap', async () => {
@@ -76,7 +76,7 @@ async function storyOn(t, headline, items) {
         assert.strictEqual(json.state, 'published');
         assert.deepStrictEqual(json.indexability.reasons.map((r) => [r.code, r.detail]), [['unsourced', '1 of 2 sources']]);
         assert.doesNotMatch(await sitemap(), new RegExp(story.slug));
-        assert.strictEqual(indexEvent(story).payload.indexability.decision, 'noindex', 'Search is told it is noindex');
+        assert.strictEqual((await indexEvent(story)).payload.indexability.decision, 'noindex', 'Search is told it is noindex');
         assert.match((await t.get('/')).text, new RegExp(`href="/stories/${story.slug}"`), 'still listed for readers');
     });
 
@@ -105,7 +105,7 @@ async function storyOn(t, headline, items) {
         assert.strictEqual(page.headers.get('x-robots-tag'), null);
         assert.deepStrictEqual((await t.get(`/stories/${story.slug}.json`)).json().indexability, { indexable: true, robots: 'index, follow', reasons: [] });
         assert.match(await sitemap(), new RegExp(`<loc>https://openvibe.news/stories/${story.slug}</loc>`));
-        assert.strictEqual(indexEvent(story).payload.indexability.decision, 'index');
+        assert.strictEqual((await indexEvent(story)).payload.indexability.decision, 'index');
     });
     await t.close();
 

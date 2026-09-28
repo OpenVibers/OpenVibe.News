@@ -18,11 +18,11 @@ const iso = (v) => (v == null ? null : new Date(v).toISOString());
 function createReading({ store, config, stories, publication, people, topics }) {
     /** The public model of a story at a revision (the published one unless given). */
     async function storyModel(story, { rev = null, editorView = false } = {}) {
-        const r = rev || (story.published_revision ? store.revisions.get(story.id, story.published_revision) : null);
+        const r = rev || (story.published_revision ? await store.revisions.get(story.id, story.published_revision) : null);
         if (!r) return null;
-        const live = publication.liveSources(r);
+        const live = await publication.liveSources(r);
         const snap = publication.snapshotOf(r);
-        const upstream = stories.openUpstreamFlags(story);
+        const upstream = await stories.openUpstreamFlags(story);
         const sources = snap.map((s) => {
             const it = live.get(s.n);
             const removed = !it || it.status === 'removed';
@@ -47,12 +47,12 @@ function createReading({ store, config, stories, publication, people, topics }) 
             g.sources.push(s.n);
         }
         const rec = publication.authorshipOf(r);
-        const review = publication.reviewOf(story, r);
+        const review = await publication.reviewOf(story, r);
         const authorSubjects = rec && Array.isArray(rec.authors) ? rec.authors : [];
         const who = authorSubjects.length ? await people.many(authorSubjects) : new Map();
         const authors = authorSubjects.map((s) => who.get(s)).filter((p) => p && p.known).map((p) => ({ name: p.name, username: p.username }));
-        const topic = publication.topicOf(story);
-        const flags = stories.publicFlags(story);
+        const topic = await publication.topicOf(story);
+        const flags = await stories.publicFlags(story);
         const retraction = flags.find((f) => f.kind === 'retraction') || null;
         return {
             story, rev: r, topic,
@@ -69,7 +69,7 @@ function createReading({ store, config, stories, publication, people, topics }) 
                 return { kind: f.kind, n: s ? s.n : null, outlet: s ? s.outlet : null, at: iso(f.created_at) };
             }),
             authorship: rec, review, disclosure: rec ? disclosure(rec, review) : null, authors,
-            decision: publication.decide(story, r),
+            decision: await publication.decide(story, r),
             first_published_at: iso(story.first_published_at), updated_at: r.createdAt, published_at: iso(story.published_at),
         };
     }
@@ -109,7 +109,7 @@ function createReading({ store, config, stories, publication, people, topics }) 
 
     /** Feed items for published (and retracted, labelled) stories: our own text only, never a source's. */
     async function feedItems({ topicId = null, limit = 30 } = {}) {
-        const { stories: rows } = stories.listPublished({ topicId, limit });
+        const { stories: rows } = await stories.listPublished({ topicId, limit });
         const out = [];
         for (const story of rows) {
             const m = await storyModel(story);
@@ -130,10 +130,10 @@ function createReading({ store, config, stories, publication, people, topics }) 
     async function listItems(rows) {
         const out = [];
         for (const story of rows) {
-            const r = store.revisions.get(story.id, story.published_revision);
+            const r = await store.revisions.get(story.id, story.published_revision);
             if (!r) continue;
             const paragraphs = publication.paragraphsOf(r);
-            const topic = publication.topicOf(story);
+            const topic = await publication.topicOf(story);
             out.push({
                 story, headline: r.fields.headline, url: publication.storyPath(story), lede: paragraphs[0] ? paragraphs[0].text : '',
                 sourceCount: publication.snapshotOf(r).length, outlets: [...new Set(publication.snapshotOf(r).map((s) => s.outlet))].slice(0, 4),

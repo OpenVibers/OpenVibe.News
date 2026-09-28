@@ -21,7 +21,7 @@ const BODY = [
     const t = await boot();
     const reports = launchReports(t.sources);
     await t.pull();
-    const clusterId = t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).cluster_id;
+    const clusterId = (await t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id)).cluster_id;
     const open = async (headline, body = BODY) => {
         const r = await t.api('/stories', { json: { cluster: clusterId, headline, topic: 'space', body } });
         assert.strictEqual(r.status, 201, r.text);
@@ -31,9 +31,9 @@ const BODY = [
     const calls = (re, method) => t.community.calls.filter((c) => re.test(c.url.split('?')[0]) && (!method || c.method === method));
     const resolves = () => calls(/\/threads\/resolve$/, 'POST');
     const hides = () => calls(/\/visibility$/, 'PUT');
-    const settle = () => t.ctx.discussion.idle();
-    const refOf = (id) => t.db().prepare('SELECT * FROM news_story_discussion_refs WHERE entity_id = ?').get(id);
-    t.community.setProbe(() => t.db().inTransaction);
+    const settle = async () => await t.ctx.discussion.idle();
+    const refOf = async (id) => await t.db().prepare('SELECT * FROM news_story_discussion_refs WHERE entity_id = ?').get(id);
+    t.community.setProbe(() => t.db().stats().open > 0);   // a News transaction still open when Community is called
 
     const story = await open('Europa Clipper is on its way to Jupiter');
     const url = `/stories/${story.slug}`;
@@ -45,7 +45,7 @@ const BODY = [
         assert.strictEqual(prev.status, 200, prev.text);
         assert.doesNotMatch(prev.text, /id="comments"/, 'the editor preview shows no thread');
         assert.strictEqual(resolves().length, 0);
-        assert.strictEqual(refOf(story.id), undefined);
+        assert.strictEqual(await refOf(story.id), undefined);
     });
 
     await check('a published story resolves its thread once, for the story’s EntityRef, and stores only the id', async () => {
@@ -60,7 +60,7 @@ const BODY = [
         const call = resolves()[0];
         assert.ok(call.cap.includes('community.comment.write'), 'resolved with the write capability');
         assert.deepStrictEqual(JSON.parse(call.body).ref, { service: 'news', type: 'story', id: story.id, label: 'Europa Clipper is on its way to Jupiter' });
-        const ref = refOf(story.id);
+        const ref = await refOf(story.id);
         assert.strictEqual(ref.thread_id, '1');
         assert.deepStrictEqual(Object.keys(ref).sort(), ['entity_id', 'ref', 'resolved_at', 'thread_id'], 'the reference table has no room for comments');
         page = await t.get(url);
@@ -90,8 +90,8 @@ const BODY = [
         const after = await t.get(url);
         assert.match(after.text, /<strong>Rita Reader<\/strong>/);
         assert.match(after.text, /Great summary; the 2030 arrival &lt;b&gt;date&lt;\/b&gt; matters\.<br>Thanks\./, 'escaped, read from Community');
-        const dump = t.db().prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()
-            .map(({ name }) => JSON.stringify(t.db().prepare(`SELECT * FROM "${name}"`).all())).join('\n');
+        const names = (await t.db().prepare("SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'").all()).map((r) => r.name);
+        const dump = (await Promise.all(names.map(async (name) => JSON.stringify(await t.db().prepare(`SELECT * FROM "${name}"`).all())))).join('\n');
         assert.doesNotMatch(dump, /Great summary|2030 arrival/, 'no comment text is copied into News');
     });
 
@@ -111,7 +111,7 @@ const BODY = [
         t.community.setDown(true);
         const p2 = await t.get(`/stories/${fresh.slug}`);
         assert.match(p2.text, /Comments are unavailable/);
-        assert.strictEqual(refOf(fresh.id), undefined, 'a failed resolve stores no thread id');
+        assert.strictEqual(await refOf(fresh.id), undefined, 'a failed resolve stores no thread id');
         t.community.setDown(false);
     });
 
@@ -136,9 +136,9 @@ const BODY = [
         const r = await t.get(`${url}/comments`, { as: member, form: { _csrf: t.csrf(member), message: 'Still here?' } });
         assert.strictEqual(r.status, 409);
 
-        const itemA = t.db().prepare('SELECT id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).id;
+        const itemA = (await t.db().prepare('SELECT id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id)).id;
         assert.strictEqual((await t.api(`/stories/${story.id}/sources/${itemA}`, { method: 'DELETE' })).status, 200);
-        const head = t.ctx.store.revisions.head(story.id).number;
+        const head = (await t.ctx.store.revisions.head(story.id)).number;
         const fixed = BODY.split('\n\n').slice(0, 2).map((p) => p.replace('[1, 2]', '[2, 3]')).join('\n\n');
         let rr = await t.api(`/stories/${story.id}/revisions`, { json: { body: fixed, expected_revision: head } });
         assert.strictEqual(rr.status, 201, rr.text);
@@ -155,7 +155,7 @@ const BODY = [
         const other = await open('Europa Clipper: the launch in numbers', BODY.split('\n\n').slice(0, 2).map((p) => p.replace(/\[[\d, ]+\]$/, '[1, 2]')).join('\n\n'));
         await publish(other);
         await t.get(`/stories/${other.slug}`);
-        const id = refOf(other.id).thread_id;
+        const id = (await refOf(other.id)).thread_id;
         let r = await t.api(`/stories/${other.id}/unpublish`, { json: {} });
         assert.strictEqual(r.status, 200, r.text);
         await settle();

@@ -13,28 +13,30 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
     const other = t.sources.addItem({ source_key: 'paper-b', title: 'Clipper mission team answers questions about Jupiter cruise', url: 'https://paper-b.example/qa', published_at: '2026-09-22T10:30:00Z' });
     const unrelated = t.sources.addItem({ source_key: 'site-c', title: 'Local bakery wins regional sourdough prize', url: 'https://site-c.example/bakery', published_at: '2026-09-22T10:40:00Z' });
     await t.pull();
-    const item = (itm) => t.db().prepare('SELECT * FROM news_source_items WHERE sources_item_id = ?').get(itm);
-    const main = item(reports.a.id).cluster_id;
-    const lone = item(unrelated.id).cluster_id;
+    const item = async (itm) => await t.db().prepare('SELECT * FROM news_source_items WHERE sources_item_id = ?').get(itm);
+    const main = (await item(reports.a.id)).cluster_id;
+    const lone = (await item(unrelated.id)).cluster_id;
 
     await check('clustering is deterministic: rebuilding from the same items in the same order gives the same grouping', async () => {
         const { createClusters } = require('../server/domain/clusters');
         const cfg = t.ctx.config;
-        const { openStore } = require('../server/db');
-        const store = openStore(':memory:', { now: t.ctx.store.now });
+        const { createStore } = require('../server/db');
+        const fresh = await require('./helpers/db').testDb();
+        const store = createStore(fresh.db, { now: t.ctx.store.now });
         const db = store.db;
         const events = [];
         const c2 = createClusters({ store, config: cfg, outbox: { emit: (e) => events.push(e) } });
-        const rows = t.db().prepare("SELECT * FROM news_source_items WHERE status <> 'duplicate' ORDER BY first_seen_at, rowid").all();
+        const rows = await t.db().prepare("SELECT * FROM news_source_items WHERE status <> 'duplicate' ORDER BY first_seen_at, seq").all();
         const groups = new Map();
         for (const r of rows) {
-            db.prepare('INSERT INTO news_source_items (id, sources_item_id, sources_revision, source_key, headline, outlet, title_key, status, published_at, summary, first_seen_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+            await db.prepare('INSERT INTO news_source_items (id, sources_item_id, sources_revision, source_key, headline, outlet, title_key, status, published_at, summary, first_seen_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
                 .run(r.id, r.sources_item_id, r.sources_revision, r.source_key, r.headline, r.outlet, r.title_key, r.status, r.published_at, r.summary, r.first_seen_at, r.updated_at);
-            const out = c2.assign(db.prepare('SELECT * FROM news_source_items WHERE id = ?').get(r.id));
+            const out = await c2.assign(await db.prepare('SELECT * FROM news_source_items WHERE id = ?').get(r.id));
             groups.set(r.id, out.cluster.id);
         }
         const original = new Map(rows.map((r) => [r.id, r.cluster_id]));
         const same = (m) => { const byC = new Map(); for (const [i, c] of m) { if (!byC.has(c)) byC.set(c, []); byC.get(c).push(i); } return [...byC.values()].map((v) => v.sort().join(',')).sort(); };
+        await fresh.close();
         assert.deepStrictEqual(same(groups), same(original));
     });
 
@@ -58,16 +60,16 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
 
     let mergeAudit;
     await check('merge is audited: the absorbed cluster’s items move, it is marked merged', async () => {
-        const before = t.ctx.clusters.members(lone).map((i) => i.id);
+        const before = (await t.ctx.clusters.members(lone)).map((i) => i.id);
         const r = await t.api(`/clusters/${main}/merge`, { json: { other: lone, reason: 'testing a merge' } });
         assert.strictEqual(r.status, 200, r.text);
         mergeAudit = r.json().audit;
         assert.strictEqual(mergeAudit.action, 'merge');
         assert.deepStrictEqual(mergeAudit.item_ids.sort(), before.sort());
-        assert.strictEqual(item(unrelated.id).cluster_id, main);
-        assert.strictEqual(t.ctx.clusters.get(lone).status, 'merged');
-        assert.strictEqual(t.ctx.clusters.get(lone).merged_into, main);
-        const ev = t.events('news.cluster.updated').filter((e) => e.payload.action === 'merged');
+        assert.strictEqual((await item(unrelated.id)).cluster_id, main);
+        assert.strictEqual((await t.ctx.clusters.get(lone)).status, 'merged');
+        assert.strictEqual((await t.ctx.clusters.get(lone)).merged_into, main);
+        const ev = (await t.events('news.cluster.updated')).filter((e) => e.payload.action === 'merged');
         assert.strictEqual(ev.length, 1);
     });
 
@@ -75,9 +77,9 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         const r = await t.api(`/clusters/audit/${mergeAudit.id}/reverse`, { json: { reason: 'wrong merge' } });
         assert.strictEqual(r.status, 200, r.text);
         assert.strictEqual(r.json().audit.action, 'reverse_merge');
-        assert.strictEqual(item(unrelated.id).cluster_id, lone);
-        assert.strictEqual(item(reports.a.id).cluster_id, main);
-        assert.strictEqual(t.ctx.clusters.get(lone).status, 'open');
+        assert.strictEqual((await item(unrelated.id)).cluster_id, lone);
+        assert.strictEqual((await item(reports.a.id)).cluster_id, main);
+        assert.strictEqual((await t.ctx.clusters.get(lone)).status, 'open');
         const again = await t.api(`/clusters/audit/${mergeAudit.id}/reverse`, { json: {} });
         assert.strictEqual(again.status, 409);
         assert.strictEqual(again.json().code, 'cluster.already_reversed');
@@ -86,26 +88,26 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
     let splitAudit;
     let splitId;
     await check('split is audited: chosen items move to a new cluster; at least one must stay', async () => {
-        const all = t.ctx.clusters.members(main).map((i) => i.id);
+        const all = (await t.ctx.clusters.members(main)).map((i) => i.id);
         let r = await t.api(`/clusters/${main}/split`, { json: { items: all } });
         assert.strictEqual(r.status, 422);
         assert.strictEqual(r.json().code, 'cluster.split_all');
-        const moving = [item(other.id).id];
+        const moving = [(await item(other.id)).id];
         r = await t.api(`/clusters/${main}/split`, { json: { items: moving, reason: 'a Q&A is a different story' } });
         assert.strictEqual(r.status, 201, r.text);
         splitAudit = r.json().audit;
         splitId = r.json().created.id;
-        assert.strictEqual(item(other.id).cluster_id, splitId);
-        assert.strictEqual(t.ctx.clusters.get(splitId).split_from, main);
+        assert.strictEqual((await item(other.id)).cluster_id, splitId);
+        assert.strictEqual((await t.ctx.clusters.get(splitId)).split_from, main);
     });
 
     await check('reversing the split puts the items back and dissolves the empty cluster (through the no-JS form)', async () => {
         const csrf = t.csrf(t.editor);
         const r = await t.get(`/clusters/audit/${splitAudit.id}/reverse`, { as: t.editor, form: { _csrf: csrf, reason: 'undo' } });
         assert.strictEqual(r.status, 303, r.text);
-        assert.strictEqual(item(other.id).cluster_id, main);
-        assert.strictEqual(t.ctx.clusters.get(splitId).status, 'dissolved');
-        const audit = t.ctx.clusters.audit(main).map((a) => a.action);
+        assert.strictEqual((await item(other.id)).cluster_id, main);
+        assert.strictEqual((await t.ctx.clusters.get(splitId)).status, 'dissolved');
+        const audit = (await t.ctx.clusters.audit(main)).map((a) => a.action);
         assert.deepStrictEqual(audit, ['merge', 'reverse_merge', 'split', 'reverse_split']);
     });
 

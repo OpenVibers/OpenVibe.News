@@ -51,17 +51,17 @@ const { boot, check, done } = require('./helpers/boot');
 
     await check('writes: 10 topics a minute per editor, shared by the API and the desk form; nothing stored past it', async () => {
         clock = Date.UTC(2026, 8, 27, 12, 5, 0);
-        const count = () => t.db().prepare('SELECT COUNT(*) AS n FROM news_topics').get().n;
+        const count = async () => (await t.db().prepare('SELECT COUNT(*) AS n FROM news_topics').get()).n;
         for (let i = 0; i < 10; i++) {
             const r = await t.api('/topics', { json: { name: `Limits topic ${i}` } });
             assert.strictEqual(r.status, 201, `topic ${i + 1}: ${r.text}`);
         }
-        const before = count();
+        const before = await count();
         const form = await t.get('/edit/topics', { as: t.editor, form: { _csrf: t.csrf(t.editor), name: 'One too many' } });
         assert.deepStrictEqual([form.status, form.json().code, form.headers.get('retry-after')], [429, 'rate_limited', '60']);
         const api = await t.api('/topics', { json: { name: 'One too many' } });
         assert.strictEqual(api.status, 429);
-        assert.strictEqual(count(), before, 'nothing stored');
+        assert.strictEqual(await count(), before, 'nothing stored');
         const other = await t.get('/api/v1/topics', { as: admin, json: { name: 'Another editor' } });
         assert.strictEqual(other.status, 201, `another editor still writes: ${other.text}`);
     });

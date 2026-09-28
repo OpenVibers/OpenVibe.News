@@ -61,20 +61,20 @@ function createPublication({ store, config, outbox }) {
     const feedId = (story) => `tag:openvibe.news,2026:story/${story.id}`;   // stable across slug changes
 
     const authorshipOf = (rev) => (rev && rev.meta && rev.meta.authorship) || null;
-    const reviewOf = (story, rev) => (rev ? store.reviews.latest(story.id, rev.number) : null);
+    const reviewOf = async (story, rev) => (rev ? await store.reviews.latest(story.id, rev.number) : null);
     const paragraphsOf = (rev) => (rev && rev.fields && Array.isArray(rev.fields.paragraphs) ? rev.fields.paragraphs : []);
     const snapshotOf = (rev) => (rev && rev.fields && Array.isArray(rev.fields.sources) ? rev.fields.sources : []);
 
     /** Live upstream state of every source a revision names: n → news_source_items row (or null). */
-    function liveSources(rev) {
+    async function liveSources(rev) {
         const out = new Map();
-        for (const s of snapshotOf(rev)) out.set(s.n, itemById.get(s.id) || null);
+        for (const s of snapshotOf(rev)) out.set(s.n, await itemById.get(s.id) || null);
         return out;
     }
 
     /** What the revision rests on, against the live source records. */
-    function support(rev) {
-        const live = liveSources(rev);
+    async function support(rev) {
+        const live = await liveSources(rev);
         const alive = (n) => { const it = live.get(n); return Boolean(it && it.status !== 'removed'); };
         const cited = new Set();
         let unsupported = 0;
@@ -97,8 +97,8 @@ function createPublication({ store, config, outbox }) {
     }
 
     /** The gate's decision for a story at one revision (the published one by default). */
-    function decide(story, rev, { state } = {}) {
-        const sup = support(rev);
+    async function decide(story, rev, { state } = {}) {
+        const sup = await support(rev);
         const rec = authorshipOf(rev);
         const facts = {
             state: gateState(story, state),
@@ -110,25 +110,25 @@ function createPublication({ store, config, outbox }) {
             retracted: (state || story.state) === 'retracted',
             noindex: Boolean(story.noindex),
         };
-        if (rec) Object.assign(facts, gateAuthorship(rec, reviewOf(story, rev)));
+        if (rec) Object.assign(facts, gateAuthorship(rec, await reviewOf(story, rev)));
         return seo.evaluate(facts, { policy, now: store.now() });
     }
 
-    function topicOf(story) { return story.topic_id ? topicById.get(story.topic_id) : null; }
+    async function topicOf(story) { return story.topic_id ? await topicById.get(story.topic_id) : null; }
 
     /**
      * The index document as it would describe this story (for the product events), or a tombstone
      * when it is not published (or retracted).
      */
-    function documentFor(story, { forSearch }) {
-        const rev = story.published_revision ? store.revisions.get(story.id, story.published_revision) : null;
+    async function documentFor(story, { forSearch }) {
+        const rev = story.published_revision ? await store.revisions.get(story.id, story.published_revision) : null;
         const identity = { owner: OWNER, type: 'story', id: story.id, revision: 0 };
-        if (!rev || story.state !== 'published') return { doc: hooks.tombstone(identity), decision: rev ? decide(story, rev) : null };
-        const decision = decide(story, rev);
+        if (!rev || story.state !== 'published') return { doc: hooks.tombstone(identity), decision: rev ? await decide(story, rev) : null };
+        const decision = await decide(story, rev);
         if (forSearch && !decision.listable) return { doc: hooks.tombstone(identity), decision };
-        const topic = topicOf(story);
+        const topic = await topicOf(story);
         const outlets = [...new Set(snapshotOf(rev).map((s) => s.outlet).filter(Boolean))].slice(0, 50);
-        const citations = store.citations.forRevision(story.id, rev.number).filter((c) => !c.anchor || !c.anchor.startsWith('t'));
+        const citations = (await store.citations.forRevision(story.id, rev.number)).filter((c) => !c.anchor || !c.anchor.startsWith('t'));
         const seen = new Set();
         const uniqueCites = citations.filter((c) => { const k = c.sourceItemId || c.url; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 49);
         const doc = hooks.buildIndexDocument({
@@ -151,13 +151,13 @@ function createPublication({ store, config, outbox }) {
     }
 
     /** Stamp and enqueue the Search document when it changed. Inside the caller's transaction. */
-    function syncIndex(story, { traceparent } = {}) {
-        const { doc } = documentFor(story, { forSearch: true });
-        const prev = store.sequencer.current(OWNER, 'story', story.id);
+    async function syncIndex(story, { traceparent } = {}) {
+        const { doc } = await documentFor(story, { forSearch: true });
+        const prev = await store.sequencer.current(OWNER, 'story', story.id);
         if (doc.deleted && prev == null) return null;
-        const stamped = store.sequencer.stamp(doc);
+        const stamped = await store.sequencer.stamp(store.db, doc);
         if (prev != null && stamped.revision === prev) return null;
-        return outbox.emit(hooks.indexEvent({ document: stamped, now: store.now() }), { traceparent });
+        return await outbox.emit(hooks.indexEvent({ document: stamped, now: store.now() }), { traceparent });
     }
 
     function snapshot(story) {
@@ -168,13 +168,13 @@ function createPublication({ store, config, outbox }) {
      * Emit the product event for a transition (news.story.published|updated|unpublished|retracted)
      * and re-sync Search. Inside the caller's transaction, after the row changed.
      */
-    function afterChange(before, storyId, { actor, traceparent, extra = {} } = {}) {
-        const story = storyById.get(storyId);
+    async function afterChange(before, storyId, { actor, traceparent, extra = {} } = {}) {
+        const story = await storyById.get(storyId);
         const after = snapshot(story);
         let event = null;
         if (after.state === 'retracted' && (!before || before.state !== 'retracted')) {
-            const d = decide(story, store.revisions.get(story.id, story.published_revision));
-            event = outbox.emit({
+            const d = await decide(story, await store.revisions.get(story.id, story.published_revision));
+            event = await outbox.emit({
                 event_type: 'news.story.retracted', version: 1, source: OWNER, actor: actorRef(actor),
                 timestamp: new Date(store.now()).toISOString(),
                 visibility: d.listable ? 'public' : 'internal',
@@ -187,16 +187,16 @@ function createPublication({ store, config, outbox }) {
             let action = hooks.actionFor(norm(before), norm(after));
             if (!action && before && before.state === 'published' && after.state === 'published' && before.url !== after.url) action = 'updated';
             if (action) {
-                const { doc, decision } = documentFor(story, { forSearch: false });
-                const topic = topicOf(story);
-                event = outbox.emit(hooks.publicationEvent({
+                const { doc, decision } = await documentFor(story, { forSearch: false });
+                const topic = await topicOf(story);
+                event = await outbox.emit(hooks.publicationEvent({
                     product: OWNER, type: 'story', action, id: story.id, revision: story.published_revision || 0,
                     actor: actorRef(actor), document: doc, decision, now: store.now(),
                     extra: { ...(topic ? { topic: topic.slug } : {}), ...extra },
                 }), { traceparent });
             }
         }
-        syncIndex(story, { traceparent });
+        await syncIndex(story, { traceparent });
         return { story, event };
     }
 

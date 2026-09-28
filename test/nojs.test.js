@@ -16,7 +16,7 @@ const BODY = [
     const t = await boot();
     const reports = launchReports(t.sources);
     await t.pull();
-    const clusterId = t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).cluster_id;
+    const clusterId = (await t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id)).cluster_id;
     const ed = t.editor;
     const csrf = t.csrf(ed);
     let storyId;
@@ -42,7 +42,7 @@ const BODY = [
         assert.match(desk.headers.get('x-robots-tag'), /noindex/);
         const r = await t.get(`/clusters/${clusterId}/stories`, { as: ed, form: { headline: 'No token' } });
         assert.strictEqual(r.status, 403);
-        assert.strictEqual(t.db().prepare('SELECT COUNT(*) AS n FROM news_stories').get().n, 0);
+        assert.strictEqual((await t.db().prepare('SELECT COUNT(*) AS n FROM news_stories').get()).n, 0);
     });
 
     await check('open a story from the cluster page, then write paragraphs with [n] markers', async () => {
@@ -68,8 +68,8 @@ const BODY = [
         assert.strictEqual(r.status, 303, r.text);
         r = await t.get(`/edit/stories/${storyId}/perspective`, { as: ed, form: { _csrf: csrf, label: 'Launch coverage', description: 'Reports about the launch itself.' } });
         assert.strictEqual(r.status, 303);
-        const per = t.db().prepare('SELECT id FROM news_perspectives WHERE story_id = ?').get(storyId).id;
-        const item = t.db().prepare('SELECT id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).id;
+        const per = (await t.db().prepare('SELECT id FROM news_perspectives WHERE story_id = ?').get(storyId)).id;
+        const item = (await t.db().prepare('SELECT id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id)).id;
         r = await t.get(`/edit/stories/${storyId}/assign`, { as: ed, form: { _csrf: csrf, item, perspective: per } });
         assert.strictEqual(r.status, 303);
         r = await t.get(`/edit/stories/${storyId}/revise`, { as: ed, form: { _csrf: csrf, expectedRevision: '1', headline: 'Europa Clipper begins its trip to Jupiter', body: BODY, topic: 'space' } });

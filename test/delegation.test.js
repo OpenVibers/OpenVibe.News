@@ -16,7 +16,7 @@ const MOD = 'mod:mod_01J8ZQ4Y7N3M2K1H0G9F8E7D6C';
     const reader = t.network.addUser('reader');
     const caps = ['news.topic.manage', 'news.story.create'];
     const token = (sub, actorType, extra) => t.network.signService({ sub, actorType, aud: ['openvibe.news'], cap: caps, extra });
-    const topicsNamed = (name) => t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM news_topics WHERE name = ?').get(name).n;
+    const topicsNamed = async (name) => (await t.ctx.store.db.prepare('SELECT COUNT(*) AS n FROM news_topics WHERE name = ?').get(name)).n;
     const newTopic = (as, name, headers) => t.get('/api/v1/topics', { as, headers, json: { name } });
 
     await check('an app or module cannot act as an editor by naming them in X-OV-Subject', async () => {
@@ -25,7 +25,7 @@ const MOD = 'mod:mod_01J8ZQ4Y7N3M2K1H0G9F8E7D6C';
                 const r = await newTopic(token(sub, type, extra), `Planted by ${type}`, { 'x-ov-subject': t.editor.subject });
                 assert.strictEqual(r.status, 403, `${type} ${JSON.stringify(extra)}: ${r.text}`);
                 assert.strictEqual(r.json().code, 'subject.not_delegated');
-                assert.strictEqual(topicsNamed(`Planted by ${type}`), 0);
+                assert.strictEqual(await topicsNamed(`Planted by ${type}`), 0);
             }
         }
     });

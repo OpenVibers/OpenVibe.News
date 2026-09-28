@@ -48,7 +48,7 @@ const longBody = `${BODY_SENTINEL} ${'The full article text goes on and on. '.re
         published_at: '2026-09-22T09:00:00Z',
     });
     await t.pull();
-    const clusterId = t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(allowed.id).cluster_id;
+    const clusterId = (await t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(allowed.id)).cluster_id;
     let r = await t.api('/stories', { json: { cluster: clusterId, headline: 'Storms delay Europa Clipper launch', topic: 'space', body: [
         'Storms over Florida delayed the launch of NASA’s Europa Clipper mission, according to reports from three outlets that covered the countdown at Kennedy Space Center. [1, 2, 3]',
         'NASA said the launch would move to a later window once the weather clears, and the agency did not give a new date in the reports cited here. [2]',
@@ -59,9 +59,9 @@ const longBody = `${BODY_SENTINEL} ${'The full article text goes on and on. '.re
     assert.strictEqual(r.status, 200, r.text);
 
     await check('bodies are never stored: no column of News’ database holds the article text', async () => {
-        const rows = t.db().prepare('SELECT * FROM news_source_items').all();
+        const rows = await t.db().prepare('SELECT * FROM news_source_items').all();
         assert.strictEqual(rows.length, 3);
-        const dump = JSON.stringify(rows) + JSON.stringify(t.db().prepare('SELECT fields, content FROM news_story_revisions').all());
+        const dump = JSON.stringify(rows) + JSON.stringify(await t.db().prepare('SELECT fields, content FROM news_story_revisions').all());
         for (const s of [BODY_SENTINEL, TAIL_SENTINEL, FORBIDDEN_SENTINEL, UNLICENSED_SENTINEL]) assert.ok(!dump.includes(s), `${s} was stored`);
         const a = rows.find((x) => x.sources_item_id === allowed.id);
         assert.ok(a.summary && a.summary.length <= 280, 'the allowed summary is kept, short');
@@ -81,13 +81,13 @@ const longBody = `${BODY_SENTINEL} ${'The full article text goes on and on. '.re
             assert.strictEqual(res.status, 200, `${p} → ${res.status}`);
             seen += res.text;
         }
-        seen += JSON.stringify(t.events());
+        seen += JSON.stringify(await t.events());
         for (const s of [BODY_SENTINEL, TAIL_SENTINEL, FORBIDDEN_SENTINEL, UNLICENSED_SENTINEL, 'The full article text goes on']) assert.ok(!seen.includes(s), `${s} leaked`);
         const page = await t.get(`/stories/${story.slug}`);
         assert.match(page.text, /Storms delayed the Europa Clipper launch\./, 'the licensed short summary is shown in the source table');
         const feeds = (await t.get('/feed.xml')).text + (await t.get('/feed.json')).text;
         assert.ok(!feeds.includes('Storms delayed the Europa Clipper launch.'), 'feeds carry our text only, never a source summary');
-        const doc = t.events('news.index_document.upserted').pop().payload;
+        const doc = (await t.events('news.index_document.upserted')).pop().payload;
         assert.ok(!JSON.stringify(doc).includes('Storms delayed the Europa Clipper launch.'), 'the Search document carries our text only');
     });
 

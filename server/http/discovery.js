@@ -22,12 +22,13 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
     const { db } = store;
     const abs = (p) => seo.canonicalUrl(config.baseUrl, p);
 
-    function storyEntries() {
-        return db.prepare("SELECT * FROM news_stories WHERE state IN ('published','retracted') AND published_revision IS NOT NULL ORDER BY published_at DESC LIMIT 50000").all()
-            .map((story) => {
-                const rev = store.revisions.get(story.id, story.published_revision);
-                return { story, rev, decision: publication.decide(story, rev) };
-            });
+    async function storyEntries() {
+        // Revisions in one query, whatever the number of stories (no N+1).
+        const rows = await db.prepare("SELECT * FROM news_stories WHERE state IN ('published','retracted') AND published_revision IS NOT NULL ORDER BY published_at DESC, id LIMIT 50000").all();
+        const revs = await store.revisions.getMany(rows.map((s) => ({ entityId: s.id, revision: s.published_revision })));
+        const out = [];
+        for (const [i, story] of rows.entries()) out.push({ story, rev: revs[i], decision: await publication.decide(story, revs[i]) });
+        return out;
     }
 
     const xml = (res, body) => res.type('application/xml').set('Cache-Control', 'public, max-age=300').send(body);
@@ -64,8 +65,8 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
         }));
     });
 
-    router.get('/sitemap.xml', (_req, res) => {
-        const entries = storyEntries().filter((e) => e.decision.indexable);
+    router.get('/sitemap.xml', async (_req, res) => {
+        const entries = (await storyEntries()).filter((e) => e.decision.indexable);
         const newest = entries.length ? entries.map((e) => e.rev.createdAt).sort().pop() : null;
         xml(res, seo.sitemapIndex([
             { loc: abs('/sitemaps/stories.xml'), ...(newest ? { lastmod: newest } : {}) },
@@ -73,20 +74,20 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
         ]));
     });
 
-    router.get('/sitemaps/stories.xml', (_req, res) => {
-        xml(res, seo.sitemap(storyEntries().map((e) => ({ loc: publication.storyUrl(e.story), lastmod: e.rev.createdAt, decision: e.decision }))).files[0]);
+    router.get('/sitemaps/stories.xml', async (_req, res) => {
+        xml(res, seo.sitemap((await storyEntries()).map((e) => ({ loc: publication.storyUrl(e.story), lastmod: e.rev.createdAt, decision: e.decision }))).files[0]);
     });
 
-    router.get('/sitemaps/topics.xml', (_req, res) => {
+    router.get('/sitemaps/topics.xml', async (_req, res) => {
         const byTopic = new Map();
-        for (const e of storyEntries()) {
+        for (const e of await storyEntries()) {
             if (!e.decision.indexable || !e.story.topic_id) continue;
             const t = e.rev.createdAt;
             if (!byTopic.has(e.story.topic_id) || byTopic.get(e.story.topic_id) < t) byTopic.set(e.story.topic_id, t);
         }
         const entries = [];
         for (const [id, lastmod] of byTopic) {
-            const topic = topics.byId(id);
+            const topic = await topics.byId(id);
             if (!topic || topic.status !== 'active') continue;
             const path = publication.topicPath(topic);
             const decision = seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: abs(path), wordCount: 0 }, { policy: { minWords: 0 }, now: store.now() });

@@ -16,15 +16,14 @@
  */
 const express = require('express');
 const { http } = require('openvibe-contracts');
-const { verifyDeliveryV2, createInbox } = require('openvibe-sdk/events');
+const { verifyDeliveryV2, createPgInbox } = require('openvibe-sdk/events');
 
 const CONSUMER = 'news-sources';
 const EVT_RE = /^evt_[0-9A-HJKMNP-TV-Z]{26}$/;
 
 function createWebhook({ config, store, ingest, sources, log = console }) {
     const router = express.Router();
-    const inbox = createInbox(store.db, { now: store.now });
-    inbox.ensureSchema();
+    const inbox = createPgInbox(store.db, { now: store.now });   // idempotency_receipts: migrations/0001_initial.sql
 
     router.post('/internal/events', express.raw({ type: () => true, limit: '256kb' }), async (req, res) => {
         const ctx = req.ov;
@@ -47,24 +46,24 @@ function createWebhook({ config, store, ingest, sources, log = console }) {
 
         try {
             if (!fromSources || !/^sources\.(item\.(created|updated|removed)|fetch\.failed)$/.test(type)) {
-                inbox.once(CONSUMER, event.event_id, () => null);
+                await inbox.once(CONSUMER, event.event_id, () => null);
                 return res.status(204).end();
             }
             if (type === 'sources.item.removed') {
-                inbox.once(CONSUMER, event.event_id, () => {
-                    const r = ingest.applyRemoval({ sourcesItemId: String(p.item_id || ''), reason: p.reason, revision: Number.isInteger(p.revision) ? p.revision : null, origin: 'webhook' });
-                    ingest.recordRun({ origin: 'webhook', state: r.outcome, source_key: p.source_key || null, sources_item_id: p.item_id || null });
+                await inbox.once(CONSUMER, event.event_id, async () => {
+                    const r = await ingest.applyRemoval({ sourcesItemId: String(p.item_id || ''), reason: p.reason, revision: Number.isInteger(p.revision) ? p.revision : null, origin: 'webhook' });
+                    await ingest.recordRun({ origin: 'webhook', state: r.outcome, source_key: p.source_key || null, sources_item_id: p.item_id || null });
                     return r;
                 });
                 return res.status(204).end();
             }
             if (type === 'sources.fetch.failed') {
-                inbox.once(CONSUMER, event.event_id, () => ingest.upstreamFailure(p));
+                await inbox.once(CONSUMER, event.event_id, () => ingest.upstreamFailure(p));
                 return res.status(204).end();
             }
             // created | updated
             if (p.category && p.category !== config.sources.category) {
-                inbox.once(CONSUMER, event.event_id, () => null);
+                await inbox.once(CONSUMER, event.event_id, () => null);
                 return res.status(204).end();
             }
             let fetched;
@@ -72,21 +71,21 @@ function createWebhook({ config, store, ingest, sources, log = console }) {
                 if (p.source_key) await ingest.learnOutlets([String(p.source_key)]);
                 fetched = await sources.getItem(String(p.item_id || ''));
             } catch (err) {
-                store.tx(() => {
-                    ingest.recordRun({ origin: 'webhook', state: 'failed', source_key: p.source_key || null, sources_item_id: p.item_id || null, error_code: err.code || 'sources.error', detail: `${type} ${event.event_id} attempt ${attempt}: ${err.message}` });
-                    if (attempt === 1) ingest.failedEvent({ origin: 'webhook', sourceKey: p.source_key || null, sourcesItemId: p.item_id || null, state: 'failed', errorCode: err.code || 'sources.error', detail: err.message, httpStatus: err.status || null });
+                await store.tx(async () => {
+                    await ingest.recordRun({ origin: 'webhook', state: 'failed', source_key: p.source_key || null, sources_item_id: p.item_id || null, error_code: err.code || 'sources.error', detail: `${type} ${event.event_id} attempt ${attempt}: ${err.message}` });
+                    if (attempt === 1) await ingest.failedEvent({ origin: 'webhook', sourceKey: p.source_key || null, sourcesItemId: p.item_id || null, state: 'failed', errorCode: err.code || 'sources.error', detail: err.message, httpStatus: err.status || null });
                 });
                 if (err.status === 404) {
                     // Sources no longer has it: nothing to apply, and retrying cannot help.
-                    inbox.once(CONSUMER, event.event_id, () => null);
+                    await inbox.once(CONSUMER, event.event_id, () => null);
                     return res.status(204).end();
                 }
                 return http.sendProblem(res, 503, 'news.sources_unavailable', { detail: 'OpenVibe.Sources could not be read; retry later', ctx });
             }
-            if (fetched.source) ingest.rememberSources({ [fetched.item.source_key]: fetched.source });
-            inbox.once(CONSUMER, event.event_id, () => {
-                const r = ingest.apply(fetched.item, { origin: 'webhook' });
-                ingest.recordRun({ origin: 'webhook', state: r.outcome, source_key: fetched.item.source_key || null, sources_item_id: fetched.item.id, detail: r.reason || null });
+            if (fetched.source) await ingest.rememberSources({ [fetched.item.source_key]: fetched.source });
+            await inbox.once(CONSUMER, event.event_id, async () => {
+                const r = await ingest.apply(fetched.item, { origin: 'webhook' });
+                await ingest.recordRun({ origin: 'webhook', state: r.outcome, source_key: fetched.item.source_key || null, sources_item_id: fetched.item.id, detail: r.reason || null });
                 return r;
             });
             return res.status(204).end();

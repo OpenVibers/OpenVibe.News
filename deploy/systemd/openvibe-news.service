@@ -3,8 +3,8 @@ Description=OpenVibe.News — source-backed stories from OpenVibe.Sources items
 # Network (sign-in, JWKS, service tokens), Sources (the items, over loopback) and Events (the outbox
 # relay and the webhook) should be up first, but News degrades gracefully without them: pages and
 # feeds serve; sign-in, ingestion and events wait and are reported by /api/ready.
-After=network.target
-Wants=openvibe-network.service
+After=network.target postgresql.service pgbouncer.service valkey-server.service
+Wants=openvibe-network.service postgresql.service pgbouncer.service valkey-server.service
 
 [Service]
 Type=simple

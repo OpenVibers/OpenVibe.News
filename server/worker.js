@@ -14,7 +14,7 @@ function createWorker({ config, ingest, outbox, log = console }) {
         if (!ingest) return null;
         try {
             const r = await ingest.pull();
-            outbox.kick();
+            await outbox.kick();
             return r;
         } catch (err) {
             log.error('[News] pull tick failed:', err.message);

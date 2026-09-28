@@ -14,7 +14,7 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
     const t = await boot({ ai: true });
     const reports = launchReports(t.sources, { a: { fields: { body: 'SECRET-BODY-FOR-AI-5c1d' } } });
     await t.pull();
-    const clusterId = t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).cluster_id;
+    const clusterId = (await t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id)).cluster_id;
     const story = (await t.api('/stories', { json: { cluster: clusterId, headline: 'Europa Clipper launch', topic: 'space' } })).json().story;
     const aiToken = t.network.serviceToken('ai', ['news.story.revise']);
     const aiHeaders = { 'x-ov-origin': 'ai' };
@@ -61,7 +61,7 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         const page = await t.get(`/stories/${story.slug}`);
         assert.match(page.text, /<strong>AI-generated\.<\/strong> AI-generated from the story’s source items by workflow news.summarize_story v1, reviewed by a person\./);
         assert.match(page.text, /<meta name="robots" content="index, follow">/);
-        const doc = t.events('news.index_document.upserted').pop().payload;
+        const doc = (await t.events('news.index_document.upserted')).pop().payload;
         assert.strictEqual(doc.authorship, 'ai_generated');
         assert.ok(doc.provenance.some((p) => p.service === 'ai' && p.type === 'run' && p.id === wf.runId));
         const json = (await t.get(`/stories/${story.slug}.json`)).json();
@@ -99,7 +99,7 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         const sent = JSON.stringify(t.ai.requests.pop());
         assert.ok(!sent.includes('SECRET-BODY-FOR-AI'), 'no body is ever sent to the model');
         assert.match(sent, /"source_type":"news.article"/);
-        assert.strictEqual(t.ctx.stories.get(s2.id).state, 'draft');
+        assert.strictEqual((await t.ctx.stories.get(s2.id)).state, 'draft');
         const edit = await t.get(`/edit/stories/${s2.id}`, { as: t.editor });
         assert.strictEqual(edit.status, 200, edit.text);
         assert.match(edit.text, /Ask OpenVibe.AI for a draft summary/);
@@ -108,7 +108,7 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         const csrf = t.csrf(t.editor);
         const rv = await t.get(`/edit/stories/${s2.id}/review`, { as: t.editor, form: { _csrf: csrf, revision: String(head.revision), decision: 'approved', note: '' } });
         assert.strictEqual(rv.status, 303, rv.text);
-        assert.strictEqual(t.ctx.store.reviews.latest(s2.id, head.revision).reviewer, t.editor.subject);
+        assert.strictEqual((await t.ctx.store.reviews.latest(s2.id, head.revision)).reviewer, t.editor.subject);
     });
 
     await check('a stub-provider run is held (stub_provider) and a failed run makes no text', async () => {
@@ -116,20 +116,20 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         t.ai.setNext({ status: 201, run: { id: 'run_01J8Z3V9Q6N1X2Y3Z4A5B6C7DA', status: 'failed', output: null } });
         let r = await t.api(`/stories/${s3.id}/ai-drafts`, { json: { workflow: 'news.compare_perspectives' } });
         assert.strictEqual(r.status, 502);
-        assert.strictEqual(t.ctx.store.revisions.head(s3.id), null);
+        assert.strictEqual(await t.ctx.store.revisions.head(s3.id), null);
         t.ai.setNext({ status: 201, run: { id: 'run_01J8Z3V9Q6N1X2Y3Z4A5B6C7DB', status: 'succeeded', synthetic: true, workflow: { key: 'news.compare_perspectives', version: 1 },
             output: { question: 'How did outlets frame the launch?', perspectives: [{ label: 'Launch', summary: 'Outlets described the launch.', citations: [0, 1] }], agreements: [], disagreements: [], citations: [], gaps: [] } } });
         r = await t.api(`/stories/${s3.id}/ai-drafts`, { json: { workflow: 'news.compare_perspectives' } });
         assert.strictEqual(r.status, 201, r.text);
-        const head = t.ctx.store.revisions.head(s3.id);
+        const head = await t.ctx.store.revisions.head(s3.id);
         assert.strictEqual(head.meta.authorship.stubProvider, true);
-        const d = t.ctx.publication.decide(t.ctx.stories.get(s3.id), head, { state: 'published' });
+        const d = await t.ctx.publication.decide(await t.ctx.stories.get(s3.id), head, { state: 'published' });
         assert.ok(d.codes.includes('stub_provider') && d.codes.includes('ai_generated_unreviewed'));
-        assert.strictEqual(t.db().prepare('SELECT COUNT(*) AS n FROM news_perspectives WHERE story_id = ?').get(s3.id).n, 0, 'AI never creates perspective labels');
+        assert.strictEqual((await t.db().prepare('SELECT COUNT(*) AS n FROM news_perspectives WHERE story_id = ?').get(s3.id)).n, 0, 'AI never creates perspective labels');
     });
 
     await check('the published product events validate as events.event-envelope@1', async () => {
-        for (const e of t.events(/^news\./)) {
+        for (const e of await t.events(/^news\./)) {
             const v = contracts.validate('events.event-envelope@1', { ...e, event_id: e.event_id || 'evt_01J8Z3V9Q6N1X2Y3Z4A5B6C7D8' });
             assert.ok(v.valid, `${e.event_type}: ${JSON.stringify(v.errors)}`);
         }
@@ -141,7 +141,7 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
     await check('with no AI configured, the AI seam is off and says so', async () => {
         const r2 = launchReports(t2.sources);
         await t2.pull();
-        const cid = t2.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(r2.a.id).cluster_id;
+        const cid = (await t2.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(r2.a.id)).cluster_id;
         const s = (await t2.api('/stories', { json: { cluster: cid, headline: 'Written by hand' } })).json().story;
         const r = await t2.api(`/stories/${s.id}/ai-drafts`, { json: { workflow: 'news.summarize_story' } });
         assert.strictEqual(r.status, 503);

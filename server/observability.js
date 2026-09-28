@@ -16,7 +16,7 @@
 const { createReadiness, skip } = require('openvibe-shared/ready');
 const { CHARTER_TABLES } = require('./db');
 
-function createNewsReadiness({ store, auth, outbox, ingest, config, release = null }) {
+function createNewsReadiness({ store, auth, outbox, ingest, config, valkey = null, release = null }) {
     const { db } = store;
     return createReadiness({
         service: 'news',
@@ -24,12 +24,16 @@ function createNewsReadiness({ store, auth, outbox, ingest, config, release = nu
         checks: [
             {
                 name: 'db', required: true,
-                check: () => {
-                    const names = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view')").all().map((r) => r.name));
+                check: async () => {
+                    // A real round trip that names the store (postgresql / pglite), and the charter tables present.
+                    const r = await db.ready();
+                    if (!r.ok) return r.error;
+                    const names = new Set((await db.prepare('SELECT table_name AS name FROM information_schema.tables WHERE table_schema = current_schema()').all()).map((x) => x.name));
                     const missing = CHARTER_TABLES.filter((t) => !names.has(t));
-                    return missing.length ? `missing ${missing.join(', ')}` : true;
+                    return missing.length ? `missing ${missing.join(', ')} (migrations did not run)` : { ok: true, detail: r.detail };
                 },
             },
+            { name: 'valkey', required: false, check: async () => (valkey ? valkey.ready() : { skipped: 'VALKEY_URL not set: per-actor limits count in this process only' }) },
             {
                 name: 'network_jwks', required: false,
                 check: () => {
@@ -40,8 +44,8 @@ function createNewsReadiness({ store, auth, outbox, ingest, config, release = nu
             },
             {
                 name: 'events_relay', required: false,
-                check: () => {
-                    const s = outbox.status();
+                check: async () => {
+                    const s = await outbox.status();
                     if (!s.enabled) return `relay off (EVENTS_URL or OV_OAUTH_CLIENT_SECRET unset); ${s.pending} events waiting`;
                     if (s.rejected) return `${s.rejected} events rejected by OpenVibe.Events`;
                     return { ok: true, detail: { pending: s.pending } };
@@ -53,8 +57,8 @@ function createNewsReadiness({ store, auth, outbox, ingest, config, release = nu
             },
             {
                 name: 'sources_pull', required: false,
-                check: () => {
-                    const last = ingest.lastPull();
+                check: async () => {
+                    const last = await ingest.lastPull();
                     const off = !config.sources.pullIntervalMs || !config.worker.enabled;
                     // Pull switched off and never run: nothing verified, so skipped, never ok (WS-Q task 7).
                     if (!last) return off ? skip('pull off (NEWS_PULL_INTERVAL_MS=0 or NEWS_WORKER=off)', { pull: 'off' }) : 'no pull from OpenVibe.Sources has run yet';

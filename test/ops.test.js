@@ -72,14 +72,16 @@ const { boot, check, done } = require('./helpers/boot');
     });
 
     await check('the seed is topics only, idempotent, and never touches an existing topic', async () => {
-        const n = t.db().prepare('SELECT COUNT(*) AS n FROM news_topics').get().n;
-        t.db().prepare("UPDATE news_topics SET name = 'Space (renamed by an editor)' WHERE slug = 'space'").run();
+        const n = (await t.db().prepare('SELECT COUNT(*) AS n FROM news_topics').get()).n;
+        await t.db().prepare("UPDATE news_topics SET name = 'Space (renamed by an editor)' WHERE slug = 'space'").run();
         await t.restart();
-        assert.strictEqual(t.db().prepare('SELECT COUNT(*) AS n FROM news_topics').get().n, n);
-        assert.strictEqual(t.db().prepare("SELECT name FROM news_topics WHERE slug = 'space'").get().name, 'Space (renamed by an editor)');
-        const out = execFileSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'seed.js')], { env: { ...process.env, NEWS_DB_PATH: t.dbPath }, encoding: 'utf8' });
-        assert.match(out, /topics: 0 added, \d+ already present/);
-        for (const table of ['news_stories', 'news_source_items', 'news_story_clusters']) assert.strictEqual(t.db().prepare(`SELECT COUNT(*) AS n FROM ${table}`).get().n, 0, table);
+        assert.strictEqual((await t.db().prepare('SELECT COUNT(*) AS n FROM news_topics').get()).n, n);
+        assert.strictEqual((await t.db().prepare("SELECT name FROM news_topics WHERE slug = 'space'").get()).name, 'Space (renamed by an editor)');
+        // scripts/seed.js is this call on the configured database (DATABASE_URL); here, on the test's own.
+        execFileSync(process.execPath, ['--check', path.join(__dirname, '..', 'scripts', 'seed.js')]);
+        const r = await require('../server/domain/topics').createTopics({ store: t.ctx.store }).seed();
+        assert.deepStrictEqual([r.created, r.existing], [0, n]);
+        for (const table of ['news_stories', 'news_source_items', 'news_story_clusters']) assert.strictEqual((await t.db().prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()).n, 0, table);
     });
 
     await t.close();

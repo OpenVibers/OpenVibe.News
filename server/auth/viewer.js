@@ -66,7 +66,7 @@ function createViewerResolver({ auth, config, people }) {
         const claims = await auth.verify(token);
         if (!claims || (typeof claims.sub === 'string' && PRINCIPAL_SUB.test(claims.sub))) return null;
         const subject = ids.isSubjectId('user', claims.subject_id) ? claims.subject_id : null;
-        if (subject && people) { try { people.rememberClaims(subject, claims); } catch { /* display cache only */ } }
+        if (subject && people) { try { await people.rememberClaims(subject, claims); } catch { /* display cache only */ } }
         return { kind: 'user', subject, staff: staffMap.can(claims, 'staff.editorial.manage'), origin: 'user', user: claimsToUser(claims), token };
     }
 
@@ -78,7 +78,7 @@ function createViewerResolver({ auth, config, people }) {
             const payload = decodeJwtPayload(token);
             if (payload && typeof payload.sub === 'string' && PRINCIPAL_SUB.test(payload.sub)) {
                 if (opts.services === false) return ANONYMOUS;
-                return fromServiceToken(req, token);
+                return await fromServiceToken(req, token);
             }
         }
         const token = extractToken(req);

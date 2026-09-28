@@ -27,7 +27,7 @@ News publishes nothing until an editor does: the only seed is the topic list.
 
 ## Owns
 
-The nine charter tables live in News' own SQLite (`NEWS_DB_PATH`):
+The nine charter tables live in News' own PostgreSQL database (`ov_news` on the host's data role, ADR-035; schema in [migrations/](migrations/)):
 
 | Charter table | What it is |
 |---|---|
@@ -222,11 +222,13 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
 
 ## Depends on
 
-- **Packages** (pinned by release tarball): `openvibe-publishing` v0.4.0 (revisions, citations,
-  authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.49.0,
-  `openvibe-shared` v1.25.0 (chrome, app icon, footer, legal, release, metrics, ready, seo),
-  `openvibe-sdk` v0.12.0 (events outbox and inbox, webhook signatures v2, service tokens, per-actor
-  limits).
+- **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
+  `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
+- **Packages** (pinned by release tarball): `openvibe-publishing` v1.0.0 (async PostgreSQL stores: revisions,
+  citations, authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.76.0,
+  `openvibe-shared` v1.25.0 (Frame, app icon, footer, legal, release, metrics, ready, seo),
+  `openvibe-sdk` v0.20.0 (db with after-commit hooks, PostgreSQL events outbox and inbox, webhook signatures v2,
+  service tokens, per-actor limits, testing).
 - **OpenVibe.Sources** (4720): `sources.item.read`; optionally `sources.source.read` (outlet
   names and source health; without it the outlet is the URL's host).
 - **OpenVibe.Events** (4300): `events.event.publish`; `events.subscription.manage` to create the
@@ -374,10 +376,13 @@ fnm exec --using=22.22.1 npm run dev       # http://localhost:4820 (set OV_OAUTH
 
 Production deploys with `sudo ovhost deploy news` on the host (strategy `git-checkout`: fetch,
 fast-forward `/opt/openvibe.news`, install on a lockfile change, restart, wait for `/api/ready`).
-The unit is `openvibe-news.service` on `127.0.0.1:4820`, the env file `/etc/openvibe/news.env`.
+The unit is `openvibe-news.service` on `127.0.0.1:4820`, the env file `/etc/openvibe/news.env`. The database is
+`ov_news` on the host's data role (`sudo /opt/openvibe.host/roles/data/add-service.sh news` writes its settings); the
+release migrates it at boot. The one-time move from SQLite is `scripts/migrate-to-postgres.js` (openvibe-sdk
+`runSqliteMigration`, with a `--pglite` rehearsal mode), run while the service is stopped; the old
+`/var/lib/openvibe-news/news.db` stays read-only for 7 days as the rollback.
 Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
-restart; afterwards `sudo ovhost rollback news --to <sha>`. Nothing blocks a rollback: the schema
-code only adds tables and columns.
+restart; afterwards `sudo ovhost rollback news --to <sha>`. Migrations only add tables and columns.
 
 First install (done once; kept for a rebuild):
 

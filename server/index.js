@@ -7,11 +7,12 @@
  */
 const { createApp } = require('./app');
 
-const { app, ctx } = createApp();
+(async () => {
+const { app, ctx } = await createApp();
 const { config } = ctx;
 
 const server = app.listen(config.port, config.host, () => {
-    console.log(`[News] ${config.nodeEnv} on http://${config.host}:${config.port} → ${config.baseUrl} (db ${config.dbPath})`);
+    console.log(`[News] ${config.nodeEnv} on http://${config.host}:${config.port} → ${config.baseUrl} (db ${ctx.store.db.store})`);
     console.log(`[News] events relay ${ctx.outbox.enabled ? `on → ${config.events.url}` : 'off (events wait in event_outbox)'}; webhook ${config.events.webhookSecrets.length ? 'on' : 'off (NEWS_EVENTS_SECRET unset)'}; Sources pull ${config.worker.enabled && config.sources.pullIntervalMs ? `every ${config.sources.pullIntervalMs} ms` : 'off'}; AI ${ctx.ai.enabled ? 'on' : 'off'}`);
 });
 server.keepAliveTimeout = 65_000;
@@ -23,10 +24,11 @@ function shutdown(signal) {
     ctx.worker.stop();
     server.close(async () => {
         try { await ctx.outbox.stop(); } catch { /* best effort */ }
-        try { ctx.store.close(); } catch { /* already closed */ }
+        try { await ctx.store.close(); } catch { /* already closed */ }
         process.exit(0);
     });
     setTimeout(() => process.exit(0), 5000).unref();
 }
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+})().catch((err) => { console.error('[News] failed to start:', err); process.exit(1); });

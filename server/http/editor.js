@@ -77,12 +77,12 @@ function createEditorRoutes(ctx) {
     // ── Dashboard ───────────────────────────────────────────
 
     router.get('/edit', wrap(async (req, res) => {
-        const flags = store.db.prepare(`SELECT f.*, s.working_headline FROM news_editorial_flags f JOIN news_stories s ON s.id = f.story_id
+        const flags = await store.db.prepare(`SELECT f.*, s.working_headline FROM news_editorial_flags f JOIN news_stories s ON s.id = f.story_id
                                         WHERE f.status = 'open' ORDER BY f.created_at DESC LIMIT 100`).all();
         page(req, res, 'Editor desk', editor.dashboard({
-            clusters: clusters.recent({ limit: 40 }).map((c) => ({ ...c, count: clusters.members(c.id).length })),
-            stories: stories.listAll({ limit: 100 }), flags, runs: ingest.runs({ limit: 20 }), sources: ingest.sourceStatus(),
-            cursor: store.getState('sources_cursor', 0), csrf: csrf(req), message: flashOf(req), aiEnabled: Boolean(ai && ai.enabled),
+            clusters: await Promise.all((await clusters.recent({ limit: 40 })).map(async (c) => ({ ...c, count: (await clusters.members(c.id)).length }))),
+            stories: await stories.listAll({ limit: 100 }), flags, runs: await ingest.runs({ limit: 20 }), sources: await ingest.sourceStatus(),
+            cursor: await store.getState('sources_cursor', 0), csrf: csrf(req), message: flashOf(req), aiEnabled: Boolean(ai && ai.enabled),
             pullOn: Boolean(config.worker.enabled && config.sources.pullIntervalMs),
         }));
     }));
@@ -92,114 +92,114 @@ function createEditorRoutes(ctx) {
         done(res, '/edit', r.ok ? `Pulled: ${JSON.stringify(r.counts)}` : `Pull failed (${r.error}): ${r.detail}`);
     }));
 
-    router.get('/edit/topics', wrap(async (req, res) => page(req, res, 'Topics', editor.topicsPage({ topics: topics.list(), csrf: csrf(req), message: flashOf(req) }))));
+    router.get('/edit/topics', wrap(async (req, res) => page(req, res, 'Topics', editor.topicsPage({ topics: await topics.list(), csrf: csrf(req), message: flashOf(req) }))));
     router.post('/edit/topics', B('news.topic.manage'), wrap(async (req, res) => {
         const b = input(req.body);
-        const r = topics.create({ name: b.name, description: b.description });
+        const r = await topics.create({ name: b.name, description: b.description });
         done(res, '/edit/topics', r.created ? `Added ${r.topic.name}` : `${r.topic.name} already exists`);
     }));
 
     // ── Clusters ────────────────────────────────────────────
 
-    function mustCluster(req, res) {
-        const c = clusters.get(req.params.id);
+    async function mustCluster(req, res) {
+        const c = await clusters.get(req.params.id);
         if (!c) { publicRoutes.notFound(req, res); return null; }
         return c;
     }
 
     router.get('/clusters/:id', wrap(async (req, res) => {
-        const c = mustCluster(req, res);
+        const c = await mustCluster(req, res);
         if (!c) return;
         page(req, res, `Cluster: ${c.label}`, editor.clusterPage({
-            cluster: c, items: clusters.members(c.id), audit: clusters.audit(c.id),
-            others: clusters.recent({ limit: 100 }).filter((o) => o.id !== c.id), storiesOf: stories.byCluster(c.id),
-            topics: topics.list(), csrf: csrf(req), message: flashOf(req),
+            cluster: c, items: await clusters.members(c.id), audit: await clusters.audit(c.id),
+            others: (await clusters.recent({ limit: 100 })).filter((o) => o.id !== c.id), storiesOf: await stories.byCluster(c.id),
+            topics: await topics.list(), csrf: csrf(req), message: flashOf(req),
         }));
     }));
     router.post('/clusters/:id/merge', B('news.cluster.manage'), wrap(async (req, res) => {
         const b = input(req.body);
-        clusters.merge(req.viewer, req.params.id, b.other, { reason: b.reason });
+        await clusters.merge(req.viewer, req.params.id, b.other, { reason: b.reason });
         done(res, `/clusters/${req.params.id}`, `Merged ${b.other} into this cluster`);
     }));
     router.post('/clusters/:id/split', B('news.cluster.manage'), wrap(async (req, res) => {
         const items = [].concat((req.body && req.body.items) || []);
-        const out = clusters.split(req.viewer, req.params.id, items, { reason: one(req.body.reason) });
+        const out = await clusters.split(req.viewer, req.params.id, items, { reason: one(req.body.reason) });
         done(res, `/clusters/${out.created.id}`, `Split ${items.length} items off ${req.params.id}`);
     }));
     router.post('/clusters/audit/:aid/reverse', B('news.cluster.manage'), wrap(async (req, res) => {
-        const out = clusters.reverse(req.viewer, req.params.aid, { reason: one(req.body.reason) });
+        const out = await clusters.reverse(req.viewer, req.params.aid, { reason: one(req.body.reason) });
         done(res, `/clusters/${out.clusters[0].id}`, `Reversed (${out.audit.action.replace('_', ' ')})`);
     }));
     router.post('/clusters/:id/stories', B('news.story.create'), wrap(async (req, res) => {
         const b = input(req.body);
-        const out = stories.create(req.viewer, { cluster: req.params.id, headline: b.headline, topic: b.topic || null }, tp(req));
+        const out = await stories.create(req.viewer, { cluster: req.params.id, headline: b.headline, topic: b.topic || null }, tp(req));
         done(res, `/edit/stories/${out.story.id}`, 'Story opened. Write the text; every paragraph cites its sources.');
     }));
 
     // ── Stories ─────────────────────────────────────────────
 
-    function mustStory(req, res) {
-        const s = stories.get(req.params.id);
+    async function mustStory(req, res) {
+        const s = await stories.get(req.params.id);
         if (!s) { publicRoutes.notFound(req, res); return null; }
         return s;
     }
 
     router.get('/edit/stories/:id', wrap(async (req, res) => {
-        const story = mustStory(req, res);
+        const story = await mustStory(req, res);
         if (!story) return;
-        const head = stories.head(story);
+        const head = await stories.head(story);
         page(req, res, story.working_headline, editor.storyEditor({
-            story, head, problems: head ? stories.problems(story, head) : [],
-            sources: stories.sources(story, { includeDetached: true }), timeline: stories.timeline(story), perspectives: stories.perspectives(story),
-            flags: stories.flags(story), revisions: stories.revisions(story, { limit: 100 }), topics: topics.list(), topic: publication.topicOf(story),
+            story, head, problems: head ? await stories.problems(story, head) : [],
+            sources: await stories.sources(story, { includeDetached: true }), timeline: await stories.timeline(story), perspectives: await stories.perspectives(story),
+            flags: await stories.flags(story), revisions: await stories.revisions(story, { limit: 100 }), topics: await topics.list(), topic: await publication.topicOf(story),
             csrf: csrf(req), message: flashOf(req), aiEnabled: Boolean(ai && ai.enabled), publicUrl: publication.storyPath(story),
-            decision: story.published_revision ? publication.decide(story, stories.revision(story, story.published_revision)) : null,
+            decision: story.published_revision ? await publication.decide(story, await stories.revision(story, story.published_revision)) : null,
         }));
     }));
 
     router.get('/edit/stories/:id/preview', wrap(async (req, res) => {
-        const story = mustStory(req, res);
+        const story = await mustStory(req, res);
         if (!story) return;
         const n = parseInt(req.query.revision, 10);
-        const rev = Number.isInteger(n) ? stories.revision(story, n) : stories.head(story);
+        const rev = Number.isInteger(n) ? await stories.revision(story, n) : await stories.head(story);
         if (!rev) return publicRoutes.notFound(req, res);
         await publicRoutes.renderStory(req, res, { story, rev, preview: true });
         return undefined;
     }));
 
     router.get('/edit/stories/:id/diff', B('news.story.diff'), wrap(async (req, res) => {
-        const story = mustStory(req, res);
+        const story = await mustStory(req, res);
         if (!story) return;
-        page(req, res, 'Diff', editor.diffPage({ story, diff: stories.diff(story, parseInt(req.query.from, 10), parseInt(req.query.to, 10), 'word') }));
+        page(req, res, 'Diff', editor.diffPage({ story, diff: await stories.diff(story, parseInt(req.query.from, 10), parseInt(req.query.to, 10), 'word') }));
     }));
 
     const act = (path, budget, fn) => router.post(`/edit/stories/:id/${path}`, B(budget), wrap(async (req, res) => {
-        const story = mustStory(req, res);
+        const story = await mustStory(req, res);
         if (!story) return;
         const text = await fn(req, story, input(req.body));
         done(res, `/edit/stories/${story.id}`, text);
     }));
 
-    act('revise', 'news.story.revise', (req, story, b) => {
-        const out = stories.revise(req.viewer, story, { headline: b.headline, body: b.body, expectedRevision: b.expectedRevision, topic: b.topic, noindex: b.noindex, message: b.message }, tp(req));
+    act('revise', 'news.story.revise', async (req, story, b) => {
+        const out = await stories.revise(req.viewer, story, { headline: b.headline, body: b.body, expectedRevision: b.expectedRevision, topic: b.topic, noindex: b.noindex, message: b.message }, tp(req));
         return out.created ? `Saved revision ${out.revision.number}` : 'Nothing changed';
     });
-    act('publish', 'news.story.publish', (req, story, b) => {
+    act('publish', 'news.story.publish', async (req, story, b) => {
         const correction = b.correctionKind || b.correctionNote ? { kind: b.correctionKind || 'correction', note: b.correctionNote } : undefined;
-        const out = stories.publish(req.viewer, story, { revision: b.revision, correction }, tp(req));
+        const out = await stories.publish(req.viewer, story, { revision: b.revision, correction }, tp(req));
         return out.changed ? `Published revision ${out.story.published_revision}` : 'Already published';
     });
-    act('unpublish', 'news.story.publish', (req, story) => (stories.unpublish(req.viewer, story, tp(req)).changed ? 'Unpublished' : 'Not published'));
-    act('retract', 'news.story.publish', (req, story, b) => (stories.retract(req.viewer, story, { note: b.note }, tp(req)).changed ? 'Retracted' : 'Already retracted'));
-    act('review', 'news.story.publish', (req, story, b) => { stories.review(req.viewer, story, { revision: b.revision, decision: b.decision, note: b.note }, tp(req)); return `Review recorded for revision ${b.revision}`; });
-    act('flag', 'news.story.annotate', (req, story, b) => { stories.addFlag(req.viewer, story, { kind: b.kind, note: b.note }); return 'Note added; it is published with the next publication'; });
-    act('attach', 'news.source.attach', (req, story, b) => `Attached as [${stories.attach(req.viewer, story, { item: b.item }).n}]`);
-    act('detach', 'news.source.attach', (req, story, b) => `Detached [${stories.detach(req.viewer, story, b.item).n}]`);
-    act('assign', 'news.story.annotate', (req, story, b) => { stories.assignPerspective(req.viewer, story, b.item, b.perspective || null); return 'Perspective set'; });
-    act('perspective', 'news.story.annotate', (req, story, b) => { stories.addPerspective(req.viewer, story, { label: b.label, description: b.description }); return 'Perspective added'; });
-    act('perspective/remove', 'news.story.annotate', (req, story, b) => { stories.removePerspective(req.viewer, story, b.perspective); return 'Perspective removed'; });
-    act('timeline', 'news.story.annotate', (req, story, b) => { stories.addTimeline(req.viewer, story, { occurredOn: b.occurredOn, text: b.text, source: b.source }); return 'Timeline entry added'; });
-    act('timeline/remove', 'news.story.annotate', (req, story, b) => { stories.removeTimeline(req.viewer, story, b.entry); return 'Timeline entry removed'; });
+    act('unpublish', 'news.story.publish', async (req, story) => ((await stories.unpublish(req.viewer, story, tp(req))).changed ? 'Unpublished' : 'Not published'));
+    act('retract', 'news.story.publish', async (req, story, b) => ((await stories.retract(req.viewer, story, { note: b.note }, tp(req))).changed ? 'Retracted' : 'Already retracted'));
+    act('review', 'news.story.publish', async (req, story, b) => { await stories.review(req.viewer, story, { revision: b.revision, decision: b.decision, note: b.note }, tp(req)); return `Review recorded for revision ${b.revision}`; });
+    act('flag', 'news.story.annotate', async (req, story, b) => { await stories.addFlag(req.viewer, story, { kind: b.kind, note: b.note }); return 'Note added; it is published with the next publication'; });
+    act('attach', 'news.source.attach', async (req, story, b) => `Attached as [${(await stories.attach(req.viewer, story, { item: b.item })).n}]`);
+    act('detach', 'news.source.attach', async (req, story, b) => `Detached [${(await stories.detach(req.viewer, story, b.item)).n}]`);
+    act('assign', 'news.story.annotate', async (req, story, b) => { await stories.assignPerspective(req.viewer, story, b.item, b.perspective || null); return 'Perspective set'; });
+    act('perspective', 'news.story.annotate', async (req, story, b) => { await stories.addPerspective(req.viewer, story, { label: b.label, description: b.description }); return 'Perspective added'; });
+    act('perspective/remove', 'news.story.annotate', async (req, story, b) => { await stories.removePerspective(req.viewer, story, b.perspective); return 'Perspective removed'; });
+    act('timeline', 'news.story.annotate', async (req, story, b) => { await stories.addTimeline(req.viewer, story, { occurredOn: b.occurredOn, text: b.text, source: b.source }); return 'Timeline entry added'; });
+    act('timeline/remove', 'news.story.annotate', async (req, story, b) => { await stories.removeTimeline(req.viewer, story, b.entry); return 'Timeline entry removed'; });
     act('ai', 'news.story.ai_draft', async (req, story, b) => {
         const out = await stories.aiDraft(req.viewer, story, b.workflow, tp(req));
         return `AI draft saved as revision ${out.revision.number}: review it before publishing`;

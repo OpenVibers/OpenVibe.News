@@ -46,11 +46,12 @@ const VERSION = require('../package.json').version;
 
 /** opts: config, store | dbPath, now (clock), fetchImpl, auth (a createAuthClient-like object), log,
  *  limitsNow (the per-actor limiter's clock, tests; default the wall clock) */
-function createApp(opts = {}) {
+async function createApp(opts = {}) {
     const config = opts.config || configLib.load();
     const log = opts.log || console;
     const fetchImpl = opts.fetchImpl || globalThis.fetch;
-    const store = opts.store || openStore(opts.dbPath || config.dbPath, { now: opts.now });
+    // PostgreSQL (ADR-035): opened and migrated here unless the caller (a test, a script) hands in a store.
+    const store = opts.store || await openStore(config, { now: opts.now, log });
 
     const outbox = createNewsOutbox({ db: store.db, config, fetchImpl, now: store.now, log });
     const publication = createPublication({ store, config, outbox });
@@ -64,7 +65,7 @@ function createApp(opts = {}) {
     ingest.setStories(stories);
     const topics = createTopics({ store });
     // Topics are the only seed (idempotent: missing slugs are added, existing ones never changed).
-    if (opts.seedTopics !== false) topics.seed();
+    if (opts.seedTopics !== false) await topics.seed();
     const people = createPeople({ store, config, fetchImpl });
     const reading = createReading({ store, config, stories, publication, people, topics });
     const auth = opts.auth || createAuthClient(config);
@@ -82,7 +83,10 @@ function createApp(opts = {}) {
     app.locals.ctx = ctx;
     // Per-actor limits (http/actor-limits.js) on /api/v1, the desk and the comment form, counted once
     // each router resolved req.viewer; the per-address limits below stay.
-    ctx.limits = createActorLimits({ config, now: opts.limitsNow || (() => Date.now()), registry: metrics.registry, log });
+    // Valkey (ADR-035): shared, never-authoritative state (per-actor limit counters). Optional.
+    const valkey = opts.valkey !== undefined ? opts.valkey : (config.valkey.url ? require('openvibe-sdk/valkey').createValkey({ url: config.valkey.url, prefix: config.valkey.prefix, log }) : null);
+    ctx.valkey = valkey;
+    ctx.limits = createActorLimits({ config, now: opts.limitsNow || (() => Date.now()), registry: metrics.registry, log, valkey });
 
     app.use(contracts.http.middleware());
     app.use(helmet({
@@ -112,7 +116,7 @@ function createApp(opts = {}) {
     app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'openvibe-news', version: VERSION }));
     // GET /release.json (ADR-016) and POST /release-metrics: open tabs' update reports into /metrics.
     release.mount(app, { registry: metrics.registry });
-    const readiness = createNewsReadiness({ store, auth, outbox, ingest, config, release: release.release });
+    const readiness = createNewsReadiness({ store, auth, outbox, ingest, config, release: release.release, valkey: ctx.valkey });
     app.get('/api/ready', readiness.handler);
 
     // ── Events webhook (raw body; before any other body parser) ─

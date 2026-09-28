@@ -19,7 +19,7 @@ const BODY = [
     const t = await boot();
     const reports = launchReports(t.sources);
     await t.pull();
-    const clusterId = t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id).cluster_id;
+    const clusterId = (await t.db().prepare('SELECT cluster_id FROM news_source_items WHERE sources_item_id = ?').get(reports.a.id)).cluster_id;
     const reader = t.network.addUser('reader');
     let story;
 
@@ -42,7 +42,7 @@ const BODY = [
         assert.strictEqual(story.state, 'draft');
         assert.deepStrictEqual(story.sources.map((s) => [s.n, s.item.sources_item.id]), [[1, reports.a.id], [2, reports.b.id], [3, reports.c.id]]);
         assert.strictEqual(story.head, null);
-        assert.strictEqual(t.events('news.story.created').length, 1);
+        assert.strictEqual((await t.events('news.story.created')).length, 1);
     });
 
     await check('a paragraph without a source, or citing a number not in the source table, is refused', async () => {
@@ -51,7 +51,7 @@ const BODY = [
         assert.strictEqual(r.json().code, 'story.claim_unsourced');
         r = await t.api(`/stories/${story.id}/revisions`, { json: { body: 'A claim citing a source that is not attached. [9]', expected_revision: 0 } });
         assert.strictEqual(r.json().code, 'story.unknown_source');
-        assert.strictEqual(t.db().prepare('SELECT COUNT(*) AS n FROM news_story_revisions').get().n, 0);
+        assert.strictEqual((await t.db().prepare('SELECT COUNT(*) AS n FROM news_story_revisions').get()).n, 0);
     });
 
     await check('a story with zero sources cannot be published', async () => {
@@ -63,8 +63,8 @@ const BODY = [
         const pub = await t.api(`/stories/${lonely.id}/publish`, { json: {} });
         assert.strictEqual(pub.status, 422);
         assert.strictEqual(pub.json().code, 'story.no_text');
-        assert.strictEqual(t.db().prepare("SELECT COUNT(*) AS n FROM news_stories WHERE state = 'published'").get().n, 0);
-        const direct = t.ctx.stories.problems(t.ctx.stories.get(lonely.id), { number: 1, fields: { headline: 'x', paragraphs: [{ text: 'x', sources: [1] }], sources: [] }, meta: {} });
+        assert.strictEqual((await t.db().prepare("SELECT COUNT(*) AS n FROM news_stories WHERE state = 'published'").get()).n, 0);
+        const direct = await t.ctx.stories.problems(await t.ctx.stories.get(lonely.id), { number: 1, fields: { headline: 'x', paragraphs: [{ text: 'x', sources: [1] }], sources: [] }, meta: {} });
         assert.ok(direct.some((p) => p.code === 'story.unsourced'));
     });
 
@@ -121,17 +121,17 @@ const BODY = [
         assert.deepStrictEqual(json.headline_sources, [1, 2]);
         assert.strictEqual(json.indexability.indexable, true);
 
-        const cites = t.db().prepare('SELECT anchor, source_item_id FROM news_story_citations WHERE entity_id = ? AND revision = 1 ORDER BY id').all(story.id);
+        const cites = await t.db().prepare('SELECT anchor, source_item_id FROM news_story_citations WHERE entity_id = ? AND revision = 1 ORDER BY id').all(story.id);
         assert.deepStrictEqual(cites.filter((c) => c.anchor.startsWith('p')).map((c) => `${c.anchor}:${c.source_item_id}`), [`p1:${reports.a.id}`, `p1:${reports.b.id}`, `p2:${reports.b.id}`, `p3:${reports.c.id}`]);
 
-        const idx = t.events('news.index_document.upserted').pop();
+        const idx = (await t.events('news.index_document.upserted')).pop();
         assert.ok(idx, 'Search gets the document');
         const doc = idx.payload;
         assert.ok(contracts.validate('search.index-document@1', doc).valid, JSON.stringify(contracts.validate('search.index-document@1', doc).errors));
         const prov = doc.provenance.filter((p) => p.service === 'sources').map((p) => p.id).sort();
         assert.deepStrictEqual(prov, [reports.a.id, reports.b.id, reports.c.id].sort());
         assert.strictEqual(doc.indexability.decision, 'index');
-        const pub = t.events('news.story.published');
+        const pub = await t.events('news.story.published');
         assert.strictEqual(pub.length, 1);
         assert.strictEqual(pub[0].visibility, 'public');
         assert.strictEqual(pub[0].payload.canonical_url, 'https://openvibe.news/stories/europa-clipper-launches-for-jupiter');
@@ -167,7 +167,7 @@ const BODY = [
         assert.match(page.text, /about fifty times/);
         assert.match(page.text, /<strong>Correction<\/strong>/);
         assert.match(page.text, /revision 2\): An earlier version said/);
-        assert.strictEqual(t.events('news.story.updated').length, 1);
+        assert.strictEqual((await t.events('news.story.updated')).length, 1);
         const json = (await t.get('/stories/europa-clipper-launches-for-jupiter.json')).json();
         assert.strictEqual(json.corrections.length, 1);
         assert.strictEqual(json.revision, 2);
@@ -195,8 +195,8 @@ const BODY = [
         const r = await t.api(`/stories/${story.id}/unpublish`, { json: {} });
         assert.strictEqual(r.json().story.state, 'unpublished');
         assert.strictEqual((await t.get('/stories/europa-clipper-launches-for-jupiter')).status, 410);
-        assert.strictEqual(t.events('news.index_document.deleted').length, 1);
-        assert.strictEqual(t.events('news.story.unpublished').length, 1);
+        assert.strictEqual((await t.events('news.index_document.deleted')).length, 1);
+        assert.strictEqual((await t.events('news.story.unpublished')).length, 1);
         assert.doesNotMatch((await t.get('/sitemaps/stories.xml')).text, /europa-clipper-launches/);
     });
 
