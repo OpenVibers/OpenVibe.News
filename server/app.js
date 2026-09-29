@@ -15,15 +15,16 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 const contracts = require('openvibe-contracts');
 
+const { createSsoClient } = require('openvibe-sdk/sso');
+const { createServiceOutbox } = require('openvibe-sdk/events');
+
 const configLib = require('./config');
 const { openStore } = require('./db');
-const { createAuthClient, createAuthRoutes } = require('./auth/sso');
 const { createViewerResolver } = require('./auth/viewer');
 const { createPeople } = require('./clients/network');
 const { createSourcesClient } = require('./clients/sources');
 const { createAi } = require('./clients/ai');
 const { createCommunity } = require('./clients/community');
-const { createNewsOutbox } = require('./events/outbox');
 const { createPublication } = require('./domain/publication');
 const { createDiscussion } = require('./domain/discussion');
 const { createClusters } = require('./domain/clusters');
@@ -44,7 +45,7 @@ const { assetVersion } = require('./render/layout');
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const VERSION = require('../package.json').version;
 
-/** opts: config, store, now (clock), fetchImpl, auth (a createAuthClient-like object), log,
+/** opts: config, store, now (clock), fetchImpl, auth (an openvibe-sdk/sso client), log,
  *  limitsNow (the per-actor limiter's clock, tests; default the wall clock) */
 async function createApp(opts = {}) {
     const config = opts.config || configLib.load();
@@ -53,7 +54,14 @@ async function createApp(opts = {}) {
     // PostgreSQL (ADR-035): opened and migrated here unless the caller (a test, a script) hands in a store.
     const store = opts.store || await openStore(config, { now: opts.now, log });
 
-    const outbox = createNewsOutbox({ db: store.db, config, fetchImpl, now: store.now, log });
+    const outbox = createServiceOutbox({
+        db: store.db, source: 'news',
+        eventsUrl: config.events.url,
+        networkInternalUrl: config.networkInternalUrl,
+        clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret,
+        intervalMs: config.events.intervalMs, log, now: store.now,
+        ...(fetchImpl ? { fetch: fetchImpl } : {}),
+    });
     const publication = createPublication({ store, config, outbox });
     const clusters = createClusters({ store, config, outbox });
     const sources = createSourcesClient({ config, fetchImpl });
@@ -68,7 +76,18 @@ async function createApp(opts = {}) {
     if (opts.seedTopics !== false) await topics.seed();
     const people = createPeople({ store, config, fetchImpl });
     const reading = createReading({ store, config, stories, publication, people, topics });
-    const auth = opts.auth || createAuthClient(config);
+    const auth = opts.auth || createSsoClient({
+        site: 'news',
+        baseUrl: config.baseUrl,
+        clientId: config.oauth.clientId,
+        clientSecret: config.oauth.clientSecret,
+        redirectUri: config.oauth.redirectUri,
+        scope: config.oauth.scope,
+        networkUrl: config.networkUrl,
+        networkInternalUrl: config.networkInternalUrl,
+        issuer: config.issuer || config.networkUrl,
+        secureCookies: config.cookies.secure,
+    });
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, ingest, outbox, log });
 
@@ -116,7 +135,7 @@ async function createApp(opts = {}) {
     app.get('/api/health', (_req, res) => res.json({ status: 'ok', service: 'openvibe-news', version: VERSION }));
     // GET /release.json (ADR-016) and POST /release-metrics: open tabs' update reports into /metrics.
     release.mount(app, { registry: metrics.registry });
-    const readiness = createNewsReadiness({ store, auth, outbox, ingest, config, release: release.release, valkey: ctx.valkey });
+    const readiness = createNewsReadiness({ store, outbox, ingest, config, release: release.release, valkey: ctx.valkey });
     app.get('/api/ready', readiness.handler);
 
     // ── Events webhook (raw body; before any other body parser) ─
@@ -126,7 +145,7 @@ async function createApp(opts = {}) {
 
     // ── Sign-in (OAuth2 client of OpenVibe.Network) ─────────
     app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));
-    app.use('/auth', createAuthRoutes(config, auth));
+    app.use('/auth', auth.router(express));
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'news', service: 'news', host: 'openvibe.news', name: 'OpenVibe.News' })); }
 
     // ── Static assets (content-hashed ?v= → immutable) ──────
