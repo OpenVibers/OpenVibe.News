@@ -38,8 +38,6 @@ function load(env = process.env) {
         // PostgreSQL (ADR-035): DATABASE_URL serves (PgBouncer), DATABASE_DIRECT_URL migrates (owner role).
         db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '' },
         valkey: { url: env.VALKEY_URL || '', prefix: env.VALKEY_PREFIX || 'ov:news:' },
-        // The SQLite file of releases before the switch: read once by scripts/migrate-to-postgres.js.
-        dbPath: env.NEWS_DB_PATH || './data/news.db',
 
         // OpenVibe.Network: SSO (OAuth2 authorization server), JWKS, client-credentials tokens.
         networkUrl: trim(env.OV_NETWORK_URL || 'https://openvibe.network'),

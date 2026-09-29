@@ -24,9 +24,6 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-# News' own database lives in /var/lib/openvibe-news; the code tree stays read-only.
-StateDirectory=openvibe-news
-Environment=NEWS_DB_PATH=/var/lib/openvibe-news/news.db
 
 [Install]
 WantedBy=multi-user.target

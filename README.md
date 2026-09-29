@@ -378,9 +378,7 @@ Production deploys with `sudo ovhost deploy news` on the host (strategy `git-che
 fast-forward `/opt/openvibe.news`, install on a lockfile change, restart, wait for `/api/ready`).
 The unit is `openvibe-news.service` on `127.0.0.1:4820`, the env file `/etc/openvibe/news.env`. The database is
 `ov_news` on the host's data role (`sudo /opt/openvibe.host/roles/data/add-service.sh news` writes its settings); the
-release migrates it at boot. The one-time move from SQLite is `scripts/migrate-to-postgres.js` (openvibe-sdk
-`runSqliteMigration`, with a `--pglite` rehearsal mode), run while the service is stopped; the old
-`/var/lib/openvibe-news/news.db` stays read-only for 7 days as the rollback.
+release migrates it at boot.
 Rollback: ovhost puts the previous sha back by itself when `/api/ready` does not answer 2xx after the
 restart; afterwards `sudo ovhost rollback news --to <sha>`. Migrations only add tables and columns.
 
@@ -395,7 +393,7 @@ First install (done once; kept for a rebuild):
 2. **Network:** create (or give a secret to) the OAuth client `news` with redirect
    `https://openvibe.news/auth/callback`, and add the grants listed above.
 3. **Search:** make sure `news` is in `SEARCH_EVENT_OWNERS`.
-4. **systemd:** install `deploy/systemd/openvibe-news.service` (port 4820, `StateDirectory=openvibe-news`).
+4. **systemd:** install `deploy/systemd/openvibe-news.service` (port 4820).
 5. **nginx:** install `deploy/nginx/openvibe.news.conf`. `/metrics` and `/internal/` are never proxied.
 6. **Seed and subscribe:** `npm run seed` (topics only; also done on boot), then
    `npm run subscribe` (creates the `sources.item.*` and `sources.fetch.failed` subscriptions to

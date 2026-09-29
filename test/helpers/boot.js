@@ -32,12 +32,10 @@ async function boot(opts = {}) {
     const ai = await startAi({ network });
     const community = await startCommunity({ network });
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ov-news-test-'));
-    const dbPath = path.join(dir, 'news.db');
     const clock = opts.clock || makeClock();
     const editor = network.addUser('ed', { display_name: 'Edie Editor' });
     const env = {
         NODE_ENV: 'test', PORT: '0', BASE_URL: 'https://openvibe.news', TRUST_PROXY: '1',
-        NEWS_DB_PATH: dbPath,
         OV_NETWORK_URL: network.url, OV_NETWORK_INTERNAL_URL: network.url,
         OV_OAUTH_CLIENT_ID: 'news', OV_OAUTH_CLIENT_SECRET: 'shh', COOKIE_SECURE: 'false',
         OV_SOURCES_INTERNAL_URL: sources.url,
@@ -52,7 +50,7 @@ async function boot(opts = {}) {
     const quiet = { log() {}, warn() {}, error: (...a) => { if (process.env.VERBOSE) console.error(...a); } };
 
     const { createStore } = require('../../server/db');
-    // One database per boot (PGlite, or NEWS_TEST_STORE=pg: the containers); a restart keeps it, like a file did.
+    // One database per boot (PGlite, or NEWS_TEST_STORE=pg: the containers); a restart keeps it.
     const testdb = await require('./db').testDb();
     let server = null;
     let built = null;
@@ -99,7 +97,7 @@ async function boot(opts = {}) {
     const api = async (p, o = {}) => await get(`/api/v1${p}`, { as: editor, ...o });
 
     const t = {
-        network, sources, ai, community, clock, dbPath, editor, get, api, events, deliver, SECRET,
+        network, sources, ai, community, clock, editor, get, api, events, deliver, SECRET,
         pull: async () => await t.ctx.ingest.pull(),
         db: () => t.ctx.store.db,
         csrf: (user) => require('../../server/auth/forms').csrfToken({ formSecret: env.NEWS_FORM_SECRET }, user),

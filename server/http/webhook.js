@@ -10,7 +10,7 @@
  *
  * Deliveries are verified with X-OpenVibe-Signature against NEWS_EVENTS_SECRET (comma-separated
  * during rotation). Exactly once: the inbox receipt (consumer, event_id) and the change commit in
- * one SQLite transaction; a redelivery is answered 204 and changes nothing. When Sources cannot be
+ * one PostgreSQL transaction; a redelivery is answered 204 and changes nothing. When Sources cannot be
  * read, the delivery is answered 503 so Events retries it, and the failure is recorded (and relayed
  * as news.source.failed on the first attempt). The cursor pull catches anything that never arrives.
  */
