@@ -131,7 +131,7 @@ const BODY = [
 
     await check('an unchanged upstream refetch (same revision) flags nothing', async () => {
         const before = (await t.db().prepare('SELECT COUNT(*) AS n FROM news_editorial_flags').get()).n;
-        await t.ctx.store.setState('sources_cursor', 0);
+        await t.db().prepare("UPDATE news_ingest_cursor SET cursor = 0 WHERE name = 'sources'").run();
         await t.pull();
         assert.strictEqual((await t.db().prepare('SELECT COUNT(*) AS n FROM news_editorial_flags').get()).n, before);
     });

@@ -8,34 +8,33 @@
  *   sources.item.removed           applied from the payload (the removal is sticky)
  *   sources.fetch.failed           recorded; relayed as news.source.failed; no text is made
  *
- * Deliveries are verified with X-OpenVibe-Signature against NEWS_EVENTS_SECRET (comma-separated
- * during rotation). Exactly once: the inbox receipt (consumer, event_id) and the change commit in
- * one PostgreSQL transaction; a redelivery is answered 204 and changes nothing. When Sources cannot be
- * read, the delivery is answered 503 so Events retries it, and the failure is recorded (and relayed
- * as news.source.failed on the first attempt). The cursor pull catches anything that never arrives.
+ * The signature (X-OpenVibe-Signature v2, ±300 s) and the exactly-once inbox come from the chassis
+ * (openvibe-publishing/ingest.createEventConsumer): the receipt (consumer, event_id) and the change
+ * commit in one PostgreSQL transaction, so a redelivery changes nothing. When Sources cannot be read,
+ * the delivery is answered 503 so Events retries it, and the failure is recorded (and relayed as
+ * news.source.failed on the first attempt). The cursor pull catches anything that never arrives.
  */
 const express = require('express');
 const { http } = require('openvibe-contracts');
-const { verifyDeliveryV2, createPgInbox } = require('openvibe-sdk/events');
+const { createEventConsumer } = require('openvibe-publishing/ingest');
 
 const CONSUMER = 'news-sources';
 const EVT_RE = /^evt_[0-9A-HJKMNP-TV-Z]{26}$/;
 
-function createWebhook({ config, store, ingest, sources, log = console }) {
+function createEvents({ config, store, ingest, sources, log = console }) {
     const router = express.Router();
-    const inbox = createPgInbox(store.db, { now: store.now });   // idempotency_receipts: migrations/0001_initial.sql
+    const consumer = createEventConsumer({ db: store.db, secrets: config.events.webhookSecrets, consumer: CONSUMER, now: store.now });
+    const { inbox, verify } = consumer;
 
     router.post('/internal/events', express.raw({ type: () => true, limit: '256kb' }), async (req, res) => {
         const ctx = req.ov;
         res.set('Cache-Control', 'no-store');
-        const secrets = config.events.webhookSecrets;
-        if (!secrets.length) return http.sendProblem(res, 503, 'news.webhook_disabled', { detail: 'NEWS_EVENTS_SECRET is not set', ctx });
+        if (!config.events.webhookSecrets.length) return http.sendProblem(res, 503, 'news.webhook_disabled', { detail: 'NEWS_EVENTS_SECRET is not set', ctx });
         const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
         // v2 only: signature over "<t>.<raw body>" and t within ±300 s (a replayed or v1-only delivery fails).
-        if (!secrets.some((s) => verifyDeliveryV2(raw, req.headers, s))) return http.sendProblem(res, 401, 'news.bad_signature', { detail: 'X-OpenVibe-Signature-V2 does not verify or is outside the replay window', ctx });
-        let body;
-        try { body = JSON.parse(raw.toString('utf8')); } catch { body = null; }
-        const event = body && body.event;
+        const delivery = verify(raw, req.headers);
+        if (!delivery) return http.sendProblem(res, 401, 'news.bad_signature', { detail: 'X-OpenVibe-Signature-V2 does not verify or is outside the replay window', ctx });
+        const event = delivery.event;
         if (!event || typeof event.event_id !== 'string' || !EVT_RE.test(event.event_id)) {
             return http.sendProblem(res, 400, 'news.bad_delivery', { detail: 'body must be { event: <envelope>, seq }', ctx });
         }
@@ -98,4 +97,4 @@ function createWebhook({ config, store, ingest, sources, log = console }) {
     return router;
 }
 
-module.exports = { createWebhook, CONSUMER };
+module.exports = { createEvents, CONSUMER };

@@ -53,7 +53,7 @@ const DIR = path.join(ROOT, 'docs', 'capabilities-proposal');
     });
 
     await check('every event type the code emits is declared', async () => {
-        const src = ['server/domain/stories.js', 'server/domain/publication.js', 'server/domain/ingest.js', 'server/domain/clusters.js']
+        const src = ['server/domain/stories.js', 'server/domain/publication.js', 'server/domain/source-items.js', 'server/domain/clusters.js']
             .map((f) => fs.readFileSync(path.join(ROOT, f), 'utf8')).join('\n');
         const found = [...src.matchAll(/event_type: '([a-z_.]+)'/g)].map((m) => m[1]);
         assert.ok(found.length >= 6);

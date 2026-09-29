@@ -259,7 +259,7 @@ function createApi(ctx) {
     router.get('/ingest', guard('news.cluster.read'), run(async (req) => {
         editorRead(req);
         return {
-            cursor: await ctx.store.getState('sources_cursor', 0),
+            cursor: await ingest.cursor(),
             runs: (await ingest.runs({ limit: 50 })).map((r) => ({ ...r, counts: parse(r.counts, null), at: iso(r.at) })),
             sources: (await ingest.sourceStatus()).map((s) => ({ ...s, stale: s.stale == null ? null : Boolean(s.stale), refreshed_at: iso(s.refreshed_at) })),
         };

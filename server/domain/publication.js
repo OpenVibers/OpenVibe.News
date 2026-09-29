@@ -9,7 +9,7 @@
  *
  * News' gate policy: at least NEWS_MIN_INDEPENDENT_SOURCES (2) independent sources, at least 40
  * words. The sources counted are the Sources items the published revision's paragraphs cite and
- * that are still live upstream, grouped by text.independentSources: items from the same Sources
+ * that are still live upstream, grouped by normalize.independentSources: items from the same Sources
  * source, the same publisher's domain, the same outlet, or copies of the same original report are
  * one source. A story on fewer is still published and readable, but noindex ('unsourced'), so it
  * stays out of sitemaps. A paragraph whose every source was removed upstream counts as an
@@ -22,7 +22,8 @@
 const seo = require('openvibe-publishing/seo');
 const hooks = require('openvibe-publishing/index-hooks');
 const authorship = require('openvibe-publishing/authorship');
-const { independentSources } = require('./text');
+const { createPublication: createPublicationGlue } = require('openvibe-publishing/publication');
+const { normalize } = require('openvibe-publishing/ingest');
 
 // minSources counts independent sources; config.indexing.minIndependentSources overrides it.
 const POLICY = Object.freeze({ minWords: 40, requireSources: true, minSources: 2 });
@@ -47,9 +48,13 @@ function disclosure(rec, review) {
     return { ...d, long: `${d.long.replace(/\.\s*$/, '')}. ${reviewed ? 'Reviewed by a person.' : 'Not yet reviewed by a person.'}` };
 }
 
-function createPublication({ store, config, outbox }) {
+function createPublication({ store, config, outbox, indexnow }) {
     const { db } = store;
     const policy = Object.freeze({ ...POLICY, minSources: (config.indexing && config.indexing.minIndependentSources) || POLICY.minSources });
+    // The chassis owns the mechanics: the sequencer revision, the search.index-document@1 event, the
+    // outbox write and the IndexNow ping — all on the caller's transaction handle (this product's
+    // gate, document builder and canonical path stay here).
+    const glue = createPublicationGlue({ owner: OWNER, sequencer: store.sequencer, outbox, baseUrl: config.baseUrl, indexnow, db, now: store.now });
     const storyById = db.prepare('SELECT * FROM news_stories WHERE id = ?');
     const itemById = db.prepare('SELECT * FROM news_source_items WHERE id = ?');
     const topicById = db.prepare('SELECT * FROM news_topics WHERE id = ?');
@@ -83,7 +88,7 @@ function createPublication({ store, config, outbox }) {
             for (const n of ns) if (alive(n)) cited.add(n);
             if (!ns.some(alive)) unsupported++;
         }
-        const groups = independentSources([...cited].map((n) => live.get(n)));
+        const groups = normalize.independentSources([...cited].map((n) => live.get(n)));
         return { citedLive: cited.size, independent: groups.length, groups, unsupported, live };
     }
 
@@ -153,11 +158,7 @@ function createPublication({ store, config, outbox }) {
     /** Stamp and enqueue the Search document when it changed. Inside the caller's transaction. */
     async function syncIndex(story, { traceparent } = {}) {
         const { doc } = await documentFor(story, { forSearch: true });
-        const prev = await store.sequencer.current(OWNER, 'story', story.id);
-        if (doc.deleted && prev == null) return null;
-        const stamped = await store.sequencer.stamp(store.db, doc);
-        if (prev != null && stamped.revision === prev) return null;
-        return await outbox.emit(hooks.indexEvent({ document: stamped, now: store.now() }), { traceparent });
+        return await glue.index(store.db, { document: doc, page: storyPath(story), traceparent });
     }
 
     function snapshot(story) {
@@ -172,14 +173,15 @@ function createPublication({ store, config, outbox }) {
         const story = await storyById.get(storyId);
         const after = snapshot(story);
         let event = null;
+        let decision = null;
         if (after.state === 'retracted' && (!before || before.state !== 'retracted')) {
-            const d = await decide(story, await store.revisions.get(story.id, story.published_revision));
+            decision = await decide(story, await store.revisions.get(story.id, story.published_revision));
             event = await outbox.emit({
                 event_type: 'news.story.retracted', version: 1, source: OWNER, actor: actorRef(actor),
                 timestamp: new Date(store.now()).toISOString(),
-                visibility: d.listable ? 'public' : 'internal',
+                visibility: decision.listable ? 'public' : 'internal',
                 subject: { type: 'story', id: story.id, revision: story.published_revision || 0 },
-                payload: { canonical_url: storyUrl(story), publication_state: 'retracted', indexability: hooks.searchIndexability(d), ...extra },
+                payload: { canonical_url: storyUrl(story), publication_state: 'retracted', indexability: hooks.searchIndexability(decision), ...extra },
             }, { traceparent });
         } else {
             // A retracted story is still published (with its notice) for the product events.
@@ -187,15 +189,19 @@ function createPublication({ store, config, outbox }) {
             let action = hooks.actionFor(norm(before), norm(after));
             if (!action && before && before.state === 'published' && after.state === 'published' && before.url !== after.url) action = 'updated';
             if (action) {
-                const { doc, decision } = await documentFor(story, { forSearch: false });
+                const { doc, decision: dec } = await documentFor(story, { forSearch: false });
+                decision = dec;
                 const topic = await topicOf(story);
-                event = await outbox.emit(hooks.publicationEvent({
-                    product: OWNER, type: 'story', action, id: story.id, revision: story.published_revision || 0,
-                    actor: actorRef(actor), document: doc, decision, now: store.now(),
+                event = await glue.publication(store.db, {
+                    type: 'story', action, id: story.id, revision: story.published_revision || 0,
+                    actor: actorRef(actor), document: doc, decision, traceparent,
                     extra: { ...(topic ? { topic: topic.slug } : {}), ...extra },
-                }), { traceparent });
+                });
             }
         }
+        // The chassis pings IndexNow inside syncIndex when the stamped document is an indexable page
+        // that appeared or changed, or a page Search already had that went away; never a draft,
+        // private or noindex page.
         await syncIndex(story, { traceparent });
         return { story, event };
     }

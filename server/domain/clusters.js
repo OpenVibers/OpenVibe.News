@@ -18,7 +18,7 @@
  * Every change emits news.cluster.updated (internal) in the same transaction.
  */
 const { ids } = require('openvibe-contracts');
-const text = require('./text');
+const { normalize } = require('openvibe-publishing/ingest');
 const { ApiError } = require('../http/errors');
 
 const newClusterId = (now) => `clu_${ids.ulid(now)}`;
@@ -28,7 +28,7 @@ const parse = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d
 /** Terms and entities of one item (headline + the licensed summary we store). */
 function signature(item) {
     const t = `${item.headline || ''}. ${item.summary || ''}`;
-    return { terms: text.terms(t), entities: text.entities(item.headline || '').concat(text.entities(item.summary || '')).filter((v, i, a) => a.indexOf(v) === i).sort() };
+    return { terms: normalize.terms(t), entities: normalize.entities(item.headline || '').concat(normalize.entities(item.summary || '')).filter((v, i, a) => a.indexOf(v) === i).sort() };
 }
 
 /** The time an item is placed at: when the source says it was published, else when News first saw it. */

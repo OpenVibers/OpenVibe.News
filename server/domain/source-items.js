@@ -1,20 +1,24 @@
 'use strict';
 
 /**
- * Ingestion: OpenVibe.Sources items (category news) → news_source_items → dedupe → clusters.
+ * OpenVibe.Sources items (category news) → news_source_items → dedupe → clusters.
+ *
+ * The chassis (openvibe-publishing/ingest) owns the Sources client, the change cursor and the pull
+ * loop; this module keeps News' domain half: what a Sources item becomes in News' tables (licensing
+ * limits included), dedupe, cluster assignment, upstream changes and the recorded run history.
  *
  * Two ways in, one effect:
  *   - the Events webhook (sources.item.created|updated|removed, sources.fetch.failed), each event
- *     applied once through the inbox (http/webhook.js);
- *   - the cursor pull (worker), the backstop for missed deliveries: GET /api/v1/items in change
- *     order from the stored cursor.
+ *     applied once through the inbox (http/events.js);
+ *   - the cursor pull (worker), the backstop for missed deliveries: the chassis reads
+ *     /api/v1/items in change order from the cursor in news_ingest_cursor and calls apply() per item.
  * apply() is idempotent on (Sources item id, Sources revision): a replay, or the same item arriving
  * by both paths, changes nothing and emits nothing.
  *
  * What is stored (licensing): headline, canonical URL, outlet, authors, published_at, the licence
  * and terms notes, and a short summary ONLY when those notes explicitly allow short summaries
- * (text.licensedSummary). Every other field of the Sources item — whatever an adapter mapped into
- * `fields` — is ignored, so an article body can never be stored, shown, fed or indexed.
+ * (normalize.licensedSummary). Every other field of the Sources item — whatever an adapter mapped
+ * into `fields` — is ignored, so an article body can never be stored, shown, fed or indexed.
  *
  * Failure is a recorded state (news_ingest_runs + news.source.failed), never a replacement: a
  * failed fetch or an unreadable item creates no source item, no cluster and no story text.
@@ -24,13 +28,18 @@
  * A removal can also hide the story's Community thread (domain/discussion.js, after the commit).
  */
 const { ids } = require('openvibe-contracts');
-const text = require('./text');
+const { createChangeCursor, pullChanges, normalize } = require('openvibe-publishing/ingest');
 
 const NEAR_TITLE = { anyOutlet: 0.9, sameOutlet: 0.75, windowMs: 48 * 3600 * 1000 };
 const newItemId = (now) => `nsi_${ids.ulid(now)}`;
+const CURSOR = 'sources';
+
+// The chassis' three pull outcomes: News' own apply() outcome decides which one it is.
+const PULL_OUTCOME = { created: 'applied', updated: 'applied', unchanged: 'applied', ignored: 'hold', rejected: 'applied', removed: 'removed' };
 
 function createIngest({ store, config, clusters, outbox, sources, discussion = null, log = console }) {
     const { db } = store;
+    const cursor = createChangeCursor(db, { prefix: 'news', now: store.now });
     let stories = null;   // set by app.js (stories depend on ingest's items too)
     const q = {
         bySourcesId: db.prepare('SELECT * FROM news_source_items WHERE sources_item_id = ?'),
@@ -63,20 +72,20 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
 
     async function outletFor(item) {
         const st = await q.status.get(item.source_key);
-        return (st && st.name) || text.hostOf(item.canonical_url) || item.source_key;
+        return (st && st.name) || normalize.hostOf(item.canonical_url) || item.source_key;
     }
 
     /** The fields News keeps from a Sources item. Nothing else of the item is read. */
     async function normalise(item) {
         const prov = item.provenance || {};
         const headline = String(item.title || '').replace(/\s+/g, ' ').trim().slice(0, 500);
-        const lic = text.licensedSummary(item.summary, { termsNote: prov.terms_note, licenseNote: prov.license_note, maxChars: config.licensing.summaryMaxChars });
+        const lic = normalize.licensedSummary(item.summary, { termsNote: prov.terms_note, licenseNote: prov.license_note, maxChars: config.licensing.summaryMaxChars });
         const authors = Array.isArray(item.authors) ? item.authors.map((a) => String(a || '').replace(/\s+/g, ' ').trim().slice(0, 200)).filter(Boolean).slice(0, 10) : [];
         const published = item.published_at && Number.isFinite(Date.parse(item.published_at)) ? new Date(Date.parse(item.published_at)).toISOString() : null;
         return {
             headline,
             canonical_url: item.canonical_url || null,
-            url_key: text.urlKey(item.canonical_url),
+            url_key: normalize.urlKey(item.canonical_url),
             outlet: await outletFor(item),
             authors: JSON.stringify(authors),
             published_at: published,
@@ -85,7 +94,7 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
             license_note: prov.license_note ? String(prov.license_note).slice(0, 2000) : null,
             terms_note: prov.terms_note ? String(prov.terms_note).slice(0, 2000) : null,
             content_hash: prov.content_hash || null,
-            title_key: text.titleKey(headline),
+            title_key: normalize.titleKey(headline),
             retrieved_at: prov.retrieved_at || null,
         };
     }
@@ -100,14 +109,14 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
             const hit = await q.byHash.get(n.content_hash);
             if (hit) return { of: hit.duplicate_of || hit.id, rule: 'content_hash', detail: n.content_hash };
         }
-        const mine = text.shingles(n.headline);
-        const host = text.hostOf(n.canonical_url);
+        const mine = normalize.shingles(n.headline);
+        const host = normalize.hostOf(n.canonical_url);
         let best = null;
         for (const c of await q.recent.all(Math.min(at, store.now()) - NEAR_TITLE.windowMs)) {
             const t = clusters.itemTime(c);
             if (Math.abs(t - at) > NEAR_TITLE.windowMs) continue;
-            const score = text.jaccard(mine, text.shingles(c.headline));
-            const sameOutlet = c.source_key === sourceKey || (host && text.hostOf(c.canonical_url) === host);
+            const score = normalize.jaccard(mine, normalize.shingles(c.headline));
+            const sameOutlet = c.source_key === sourceKey || (host && normalize.hostOf(c.canonical_url) === host);
             const threshold = sameOutlet ? NEAR_TITLE.sameOutlet : NEAR_TITLE.anyOutlet;
             if (score >= threshold && (!best || score > best.score)) best = { c, score, sameOutlet };
         }
@@ -129,7 +138,7 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
     }
 
     /**
-     * Apply one Sources item (inside a transaction the caller may already hold). Returns
+     * Apply one Sources item (inside the caller's transaction). Returns
      * { outcome: created|updated|removed|unchanged|ignored|rejected, item?, reason? }.
      */
     async function apply(item, { origin = 'pull' } = {}) {
@@ -233,35 +242,37 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
     }
 
     /**
-     * The cursor pull. Reads pages from the stored cursor until Sources says there is no more (or
-     * the page budget is spent), applying each item. The cursor moves only past applied pages.
+     * The cursor pull. The chassis (openvibe-publishing/ingest.pullChanges) reads pages from the
+     * stored cursor until Sources says there is no more (or the page budget is spent), applying each
+     * item in its own savepoint and moving the cursor only past applied pages. This module's page
+     * source also refreshes the display-only source status; apply() records News' own counts.
      */
     let pulling = null;
     async function pull() {
         if (pulling) return pulling;
         pulling = (async () => {
-            const before = await store.getState('sources_cursor', 0);
-            let after = before;
-            const counts = { created: 0, updated: 0, removed: 0, unchanged: 0, ignored: 0, rejected: 0, duplicates: 0 };
-            try {
-                for (let page = 0; page < config.sources.maxPagesPerRun; page++) {
-                    const body = await sources.listItems({ after, limit: config.sources.pageSize });
+            const before = await cursor.get(CURSOR);
+            const counts = { created: 0, updated: 0, removed: 0, unchanged: 0, ignored: 0, rejected: 0, duplicates: 0, failed: 0 };
+            const tally = (r) => { if (!r || !r.outcome) return; counts[r.outcome] = (counts[r.outcome] || 0) + 1; if (r.outcome === 'created' && r.item && r.item.status === 'duplicate') counts.duplicates++; };
+            const pageSource = {
+                listItems: async (opts) => {
+                    const body = await sources.listItems(opts);
                     await rememberSources(body.sources);
-                    await learnOutlets(body.items.map((i) => i.source_key).filter(Boolean));
-                    await store.tx(async () => {
-                        for (const item of body.items) {
-                            const r = await apply(item, { origin: 'pull' });
-                            counts[r.outcome] = (counts[r.outcome] || 0) + 1;
-                            if (r.outcome === 'created' && r.item.status === 'duplicate') counts.duplicates++;
-                        }
-                        await store.setState('sources_cursor', body.next_after);
-                    });
-                    after = body.next_after;
-                    if (!body.more) break;
-                }
-                await store.tx(async () => await recordRun({ origin: 'pull', state: 'ok', counts, cursor_before: before, cursor_after: after }));
-                return { ok: true, counts, cursor: after };
+                    await learnOutlets((body.items || []).map((i) => i.source_key).filter(Boolean));
+                    return body;
+                },
+            };
+            try {
+                const summary = await pullChanges({
+                    db, cursor, source: pageSource, name: CURSOR,
+                    maxPages: config.sources.maxPagesPerRun, pageSize: config.sources.pageSize,
+                    apply: async (item) => { const r = await apply(item, { origin: 'pull' }); tally(r); return PULL_OUTCOME[r.outcome] || 'applied'; },
+                    onItem: (_item, err, outcome) => { if (outcome === 'failed') { counts.failed++; log.warn(`[News] item skipped (${err && err.message ? err.message : 'error'})`); } },
+                });
+                await store.tx(async () => await recordRun({ origin: 'pull', state: 'ok', counts, cursor_before: before, cursor_after: summary.after }));
+                return { ok: true, counts, cursor: summary.after };
             } catch (err) {
+                const after = await cursor.get(CURSOR);
                 const prev = await q.lastPull.get();
                 await store.tx(async () => {
                     await recordRun({ origin: 'pull', state: 'failed', error_code: err.code || 'pull.error', detail: err.message, counts, cursor_before: before, cursor_after: after });
@@ -279,6 +290,7 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
         NEAR_TITLE,
         setStories(s) { stories = s; },
         normalise, dedupe, apply, applyRemoval, upstreamFailure, pull, recordRun, failedEvent, learnOutlets, rememberSources,
+        cursor: async () => await cursor.get(CURSOR),
         get: async (id) => await q.byId.get(String(id || '')) || null,
         bySourcesId: async (id) => await q.bySourcesId.get(String(id || '')) || null,
         runs: async ({ limit = 30 } = {}) => await db.prepare('SELECT * FROM news_ingest_runs ORDER BY id DESC LIMIT ?').all(limit),
@@ -287,4 +299,4 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
     };
 }
 
-module.exports = { createIngest, NEAR_TITLE };
+module.exports = { createIngest, NEAR_TITLE, CURSOR };

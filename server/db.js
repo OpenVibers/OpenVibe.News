@@ -22,8 +22,9 @@
  *   news_story_citations, news_story_reviews, news_story_drafts, news_story_revision_purges,
  *   news_story_discussion_refs (a story's Community thread id, never its comments),
  *   news_index_revisions (publishing packages); news_cluster_audit (every merge, split and reversal);
- *   news_ingest_runs (what each webhook delivery, pull and upstream failure did); news_state (the
- *   Sources cursor); news_source_status (a display cache of Sources' registry and health);
+ *   news_ingest_runs (what each webhook delivery, pull and upstream failure did); news_ingest_cursor
+ *   (the chassis' Sources change cursor; news_state holds the pre-chassis key it was carried from);
+ *   news_source_status (a display cache of Sources' registry and health);
  *   event_outbox and idempotency_receipts (openvibe-sdk); subject_projections (Network names).
  */
 const fs = require('fs');
@@ -45,9 +46,10 @@ const DEV_PGLITE = path.join(__dirname, '..', 'data', 'pglite');
 async function openDb(config, { log = console, registry } = {}) {
     if (!config.db.url) {
         if (config.isProduction) throw new Error('DATABASE_URL is not set: production serves from PostgreSQL (OpenVibe.Host roles/data add-service.sh news)');
-        log.warn(`[News] DATABASE_URL unset: embedded PGlite database in ${DEV_PGLITE} (development only, one process)`);
-        fs.mkdirSync(DEV_PGLITE, { recursive: true });
-        const db = createDb({ pglite: DEV_PGLITE, service: 'news', registry, log });
+        const dir = config.db.pgliteDir || DEV_PGLITE;
+        log.warn(`[News] DATABASE_URL unset: embedded PGlite database in ${dir} (development only, one process)`);
+        fs.mkdirSync(dir, { recursive: true });
+        const db = createDb({ pglite: dir, service: 'news', registry, log });
         await db.migrate({ dir: MIGRATIONS, log });
         return db;
     }
@@ -63,9 +65,6 @@ async function openDb(config, { log = console, registry } = {}) {
  */
 function createStore(db, { now = () => Date.now() } = {}) {
     const revisions = createRevisionStore(db, { prefix: 'news_story', now });
-    const getStateStmt = db.prepare('SELECT value FROM news_state WHERE key = ?');
-    const setStateStmt = db.prepare(`INSERT INTO news_state (key, value, updated_at) VALUES (?, ?, ?)
-                        ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`);
     return {
         db,
         now,
@@ -75,13 +74,6 @@ function createStore(db, { now = () => Date.now() } = {}) {
         sequencer: createIndexSequencer(db, { prefix: 'news', now }),
         discussion: createDiscussionRefs(db, { prefix: 'news_story', now }),
         tx: async (fn) => await db.tx(() => fn()),
-        async getState(key, def = null) {
-            const r = await getStateStmt.get(key);
-            return r ? JSON.parse(r.value) : def;
-        },
-        async setState(key, value) {
-            await setStateStmt.run(key, JSON.stringify(value), now());
-        },
         close: () => db.close(),
     };
 }

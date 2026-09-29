@@ -8,7 +8,7 @@
  */
 const assert = require('assert');
 const { boot, check, done } = require('./helpers/boot');
-const text = require('../server/domain/text');
+const text = require('openvibe-publishing/ingest').normalize;
 
 const PARA = 'Officials confirmed on Tuesday that the regional water authority will open two new treatment plants next spring, adding capacity for roughly 400,000 residents across the valley and ending the seasonal restrictions of recent summers. The authority said construction is on schedule and within the approved budget.';
 

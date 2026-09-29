@@ -8,7 +8,7 @@
  */
 const assert = require('assert');
 const { boot, check, done } = require('./helpers/boot');
-const { licensedSummary } = require('../server/domain/text');
+const { licensedSummary } = require('openvibe-publishing/ingest').normalize;
 
 const BODY_SENTINEL = 'SECRET-FULL-ARTICLE-BODY-7f3a';
 const TAIL_SENTINEL = 'SECRET-SUMMARY-TAIL-91c2';

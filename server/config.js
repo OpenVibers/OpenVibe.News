@@ -36,7 +36,9 @@ function load(env = process.env) {
         },
 
         // PostgreSQL (ADR-035): DATABASE_URL serves (PgBouncer), DATABASE_DIRECT_URL migrates (owner role).
-        db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '' },
+        // Non-production without DATABASE_URL: the embedded PGlite database in data/pglite
+        // (NEWS_PGLITE_DIR, tests: an isolated directory of their own).
+        db: { url: env.DATABASE_URL || '', directUrl: env.DATABASE_DIRECT_URL || '', pgliteDir: env.NEWS_PGLITE_DIR || '' },
         valkey: { url: env.VALKEY_URL || '', prefix: env.VALKEY_PREFIX || 'ov:news:' },
 
         // OpenVibe.Network: SSO (OAuth2 authorization server), JWKS, client-credentials tokens.
@@ -80,6 +82,11 @@ function load(env = process.env) {
         indexing: {
             minIndependentSources: Math.max(int(env.NEWS_MIN_INDEPENDENT_SOURCES, 2), 1),
         },
+
+        // IndexNow (openvibe-shared/indexnow): when INDEXNOW_KEY is set the key file is served at
+        // /<key>.txt and every publish, update, unpublish or delete of a public, indexable page pings
+        // the engines. Unset: off — nothing is mounted and nothing is sent.
+        indexnow: { key: env.INDEXNOW_KEY || '' },
 
         // Clustering: the time window a new item may join an existing cluster in.
         clustering: {

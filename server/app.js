@@ -17,18 +17,19 @@ const contracts = require('openvibe-contracts');
 
 const { createSsoClient } = require('openvibe-sdk/sso');
 const { createServiceOutbox } = require('openvibe-sdk/events');
+const { createSourcesClient } = require('openvibe-publishing/ingest');
+const { createIndexNow } = require('openvibe-shared/indexnow');
 
 const configLib = require('./config');
 const { openStore } = require('./db');
 const { createViewerResolver } = require('./auth/viewer');
 const { createPeople } = require('./clients/network');
-const { createSourcesClient } = require('./clients/sources');
 const { createAi } = require('./clients/ai');
 const { createCommunity } = require('./clients/community');
 const { createPublication } = require('./domain/publication');
 const { createDiscussion } = require('./domain/discussion');
 const { createClusters } = require('./domain/clusters');
-const { createIngest } = require('./domain/ingest');
+const { createIngest } = require('./domain/source-items');
 const { createStories } = require('./domain/stories');
 const { createTopics } = require('./domain/topics');
 const { createReading } = require('./domain/reading');
@@ -36,7 +37,7 @@ const { createPublicRoutes } = require('./http/public');
 const { createEditorRoutes } = require('./http/editor');
 const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
-const { createWebhook } = require('./http/webhook');
+const { createEvents } = require('./http/events');
 const { createActorLimits } = require('./http/actor-limits');
 const { createNewsReadiness } = require('./observability');
 const { createWorker } = require('./worker');
@@ -62,7 +63,11 @@ async function createApp(opts = {}) {
         intervalMs: config.events.intervalMs, log, now: store.now,
         ...(fetchImpl ? { fetch: fetchImpl } : {}),
     });
-    const publication = createPublication({ store, config, outbox });
+    // IndexNow (openvibe-shared/indexnow): created once at boot from INDEXNOW_KEY; unset → off
+    // (nothing mounted, nothing sent). The key file is served at /<key>.txt and publication.js
+    // pings the engines when an indexable page appears, changes or goes away.
+    const indexnow = opts.indexnow || createIndexNow({ host: config.baseUrl, key: config.indexnow.key, ...(fetchImpl ? { fetch: fetchImpl } : {}), log });
+    const publication = createPublication({ store, config, outbox, indexnow });
     const clusters = createClusters({ store, config, outbox });
     const sources = createSourcesClient({ config, fetchImpl });
     const ai = createAi({ config, fetchImpl });
@@ -91,7 +96,7 @@ async function createApp(opts = {}) {
     const viewers = createViewerResolver({ auth, config, people });
     const worker = createWorker({ config, ingest, outbox, log });
 
-    const ctx = { config, store, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker };
+    const ctx = { config, store, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow };
 
     const app = express();
     app.disable('x-powered-by');
@@ -138,9 +143,11 @@ async function createApp(opts = {}) {
     release.mount(app, { registry: metrics.registry });
     const readiness = createNewsReadiness({ store, outbox, ingest, config, release: release.release, valkey: ctx.valkey });
     app.get('/api/ready', readiness.handler);
+    // GET /<key>.txt — the IndexNow key file (only when a key is configured; it serves itself).
+    if (indexnow.enabled) app.use(indexnow.keyFile);
 
     // ── Events webhook (raw body; before any other body parser) ─
-    app.use(createWebhook({ config, store, ingest, sources, log }));
+    app.use(createEvents({ config, store, ingest, sources, log }));
 
     app.use(cookieParser());
 

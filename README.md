@@ -50,8 +50,9 @@ Other tables in the same database:
   an author).
 - `news_cluster_audit`: every merge, split and reversal with exactly which items moved.
 - `news_ingest_runs`: what every webhook delivery, pull and upstream fetch failure did.
-- `news_state` (the Sources cursor), `news_source_status` (display cache of Sources' registry
-  names and health), `event_outbox` and `idempotency_receipts` (openvibe-sdk),
+- `news_ingest_cursor` (the OpenVibe.Sources change cursor, `openvibe-publishing/ingest`; `news_state`
+  keeps the pre-chassis key it was carried from), `news_source_status` (display cache of Sources'
+  registry names and health), `event_outbox` and `idempotency_receipts` (openvibe-sdk),
   `subject_projections` (Network names). None of them is authority for anything outside News.
 
 ## Does not own
@@ -176,6 +177,10 @@ Other tables in the same database:
 - JSON-LD `NewsArticle` from real fields only: headline, dates, the editors named in the
   revision's authorship (only when the Network name is known), the section (topic), the cited
   source URLs, and OpenVibe.News as publisher. Missing fields are omitted.
+- IndexNow (`openvibe-shared/indexnow`): with `INDEXNOW_KEY` set, the key file is served at
+  `/<key>.txt` and publishing, updating or unpublishing an indexable story pings the engines with
+  the story's URL and `/sitemap.xml`. Unset, the feature is off — nothing is mounted and nothing is
+  sent. Drafts, private and noindex pages are never pinged (`test/indexnow.test.js`).
 - Drafts, unpublished, retracted and noindex stories never appear in sitemaps or Search; feeds
   list published and (labelled) retracted stories, never a draft.
 
@@ -224,8 +229,10 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
 
 - **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
-- **Packages** (pinned by release tarball): `openvibe-publishing` v1.0.0 (async PostgreSQL stores: revisions,
-  citations, authorship, seo, index-hooks, ssr, taxonomy slugify), `openvibe-contracts` v0.79.0,
+- **Packages** (pinned by release tarball): `openvibe-publishing` v1.1.0 (async PostgreSQL stores: revisions,
+  citations, authorship, seo, index-hooks, ssr, taxonomy slugify, and the shared ingest/publication
+  chassis: the Sources client, the change-cursor pull, the signed events consumer and the
+  gate → document → outbox glue), `openvibe-contracts` v0.79.0,
   `openvibe-shared` v2.2.0 (Frame, app icon, footer, legal, release, metrics, ready, seo),
   `openvibe-sdk` v0.25.0 (db with after-commit hooks, PostgreSQL events outbox and inbox, webhook signatures v2,
   service tokens, Network sign-in (`openvibe-sdk/sso`) and the service outbox (`openvibe-sdk/events`), per-actor limits, testing).
@@ -389,7 +396,7 @@ First install (done once; kept for a rebuild):
    `NEWS_EDITORS`, `NEWS_FORM_SECRET`, `NEWS_EVENTS_SECRET` (`openssl rand -hex 32`),
    `EVENTS_URL=http://127.0.0.1:4300`, `OV_SOURCES_INTERNAL_URL=http://127.0.0.1:4720`,
    `BASE_URL=https://openvibe.news`, `OV_COMMUNITY_INTERNAL_URL=http://127.0.0.1:4200`, and
-   optionally `OV_AI_INTERNAL_URL`.
+   optionally `OV_AI_INTERNAL_URL` and `INDEXNOW_KEY`.
 2. **Network:** create (or give a secret to) the OAuth client `news` with redirect
    `https://openvibe.news/auth/callback`, and add the grants listed above.
 3. **Search:** make sure `news` is in `SEARCH_EVENT_OWNERS`.

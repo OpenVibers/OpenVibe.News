@@ -82,7 +82,7 @@ function createEditorRoutes(ctx) {
         page(req, res, 'Editor desk', editor.dashboard({
             clusters: await Promise.all((await clusters.recent({ limit: 40 })).map(async (c) => ({ ...c, count: (await clusters.members(c.id)).length }))),
             stories: await stories.listAll({ limit: 100 }), flags, runs: await ingest.runs({ limit: 20 }), sources: await ingest.sourceStatus(),
-            cursor: await store.getState('sources_cursor', 0), csrf: csrf(req), message: flashOf(req), aiEnabled: Boolean(ai && ai.enabled),
+            cursor: await ingest.cursor(), csrf: csrf(req), message: flashOf(req), aiEnabled: Boolean(ai && ai.enabled),
             pullOn: Boolean(config.worker.enabled && config.sources.pullIntervalMs),
         }));
     }));
