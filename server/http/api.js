@@ -178,7 +178,7 @@ function createApi(ctx) {
     }));
 
     // guards: the capability guard, then the route's per-actor budget (both before the body is read).
-    const write = (method, path, guards, fn, status = 200) => router[method](path, guards, jsonBody, run(async (req) => fn(req, await mustStory(req), req.body || {}), status));
+    const write = (method, path, guards, fn, status = 200) => router[method](path, guards, jsonBody, run(async (req) => await fn(req, await mustStory(req), req.body || {}), status));
 
     write('post', '/stories/:id/revisions', [guard('news.story.revise'), B('news.story.revise')], async (req, story, b) => {
         const out = await stories.revise(req.viewer, story, {
@@ -225,7 +225,7 @@ function createApi(ctx) {
     router.get('/clusters', guard('news.cluster.read'), run(async (req) => {
         editorRead(req);
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
-        return { clusters: await Promise.all((await clusters.recent({ limit })).map((c) => clusterDto(c))) };
+        return { clusters: await Promise.all((await clusters.recent({ limit })).map(async (c) => await clusterDto(c))) };
     }));
     router.get('/clusters/:id', guard('news.cluster.read'), run(async (req) => {
         editorRead(req);
@@ -236,7 +236,7 @@ function createApi(ctx) {
     router.post('/clusters/audit/:auditId/reverse', guard('news.cluster.manage'), B('news.cluster.manage'), jsonBody, run(async (req) => {
         access.requireEditor(config, req.viewer);
         const out = await clusters.reverse(req.viewer, req.params.auditId, { reason: (req.body || {}).reason });
-        return { audit: out.audit, clusters: await Promise.all(out.clusters.map((c) => clusterDto(c))) };
+        return { audit: out.audit, clusters: await Promise.all(out.clusters.map(async (c) => await clusterDto(c))) };
     }));
     router.post('/clusters/:id/merge', guard('news.cluster.manage'), B('news.cluster.manage'), jsonBody, run(async (req) => {
         access.requireEditor(config, req.viewer);

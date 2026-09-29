@@ -133,12 +133,12 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
      * { outcome: created|updated|removed|unchanged|ignored|rejected, item?, reason? }.
      */
     async function apply(item, { origin = 'pull' } = {}) {
-        return db.tx(async () => {
+        return await db.tx(async () => {
             if (!item || typeof item.id !== 'string') return { outcome: 'rejected', reason: 'item without id' };
             if (item.category && item.category !== config.sources.category) return { outcome: 'ignored', reason: `category ${item.category}` };
             const revision = Number.isInteger(item.revision) ? item.revision : 1;
             const cur = await q.bySourcesId.get(item.id);
-            if (item.removed) return applyRemoval({ sourcesItemId: item.id, reason: item.removed.reason || 'removed upstream', revision, origin });
+            if (item.removed) return await applyRemoval({ sourcesItemId: item.id, reason: item.removed.reason || 'removed upstream', revision, origin });
             if (cur && cur.sources_revision >= revision) return { outcome: 'unchanged', item: cur };
             const n = await normalise(item);
             if (!n.headline) {
@@ -180,7 +180,7 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
 
     /** A Sources removal (takedown, licence, error): sticky; the stored summary is dropped. */
     async function applyRemoval({ sourcesItemId, reason, revision = null, origin = 'webhook' }) {
-        return db.tx(async () => {
+        return await db.tx(async () => {
             const cur = await q.bySourcesId.get(sourcesItemId);
             if (!cur) return { outcome: 'ignored', reason: 'never ingested' };
             if (cur.status === 'removed') return { outcome: 'unchanged', item: cur };
@@ -200,7 +200,7 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
 
     /** sources.fetch.failed for a news source: recorded and relayed; nothing else changes. */
     async function upstreamFailure(payload) {
-        return db.tx(async () => {
+        return await db.tx(async () => {
             if (payload.category && payload.category !== config.sources.category) return { outcome: 'ignored' };
             await recordRun({ origin: 'sources', state: String(payload.state || 'failed').slice(0, 40), source_key: payload.source_key || null, error_code: payload.error_code || null,
                 detail: `run ${payload.run_id || '?'}${payload.http_status ? ` HTTP ${payload.http_status}` : ''}${payload.consecutive_failures ? `, ${payload.consecutive_failures} consecutive failures` : ''}` });

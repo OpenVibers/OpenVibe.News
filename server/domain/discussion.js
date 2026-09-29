@@ -45,7 +45,7 @@ function createDiscussion({ store, publication, community, log = console }) {
     async function watch(storyId) {
         if (!community.enabled) return;
         const was = (await status(await storyById.get(storyId))).open;
-        db.afterCommit(() => { flushing = flushing.then(() => follow(storyId, was)).catch((err) => log.warn(`[News] comment thread sync failed: ${err.message}`)); });
+        db.afterCommit(() => { flushing = flushing.then(async () => await follow(storyId, was)).catch((err) => log.warn(`[News] comment thread sync failed: ${err.message}`)); });
     }
 
     return {
