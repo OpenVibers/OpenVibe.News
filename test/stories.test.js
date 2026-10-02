@@ -100,7 +100,7 @@ const BODY = [
         assert.match(page.text, /Wire A/);
         assert.match(page.text, /Ana Reporter/);
         assert.match(page.text, /<meta name="robots" content="index, follow">/);
-        assert.strictEqual(page.headers.get('cache-control'), 'public, max-age=60, stale-while-revalidate=60');
+        assert.strictEqual(page.headers.get('cache-control'), 'public, max-age=60, stale-while-revalidate=3600');
         assert.match(page.text, /"@type":"NewsArticle"/);
         assert.match(page.text, /Mission announcements/);
         assert.match(page.text, /2026-09-22<\/time> — Europa Clipper lifts off/);

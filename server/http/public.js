@@ -27,6 +27,7 @@ const { renderPage } = require('../render/layout');
 const pages = require('../render/pages');
 const access = require('../domain/access');
 const { csrfToken, checkCsrf } = require('../auth/forms');
+const cache = require('openvibe-shared/cache-policy');
 
 const PER_PAGE = 20;
 
@@ -38,8 +39,8 @@ function createPublicRoutes(ctx) {
     function cacheHeaders(res, { cacheable, robots }) {
         res.vary('Cookie');
         res.vary('Authorization');
-        if (cacheable) res.set('Cache-Control', 'public, max-age=60, stale-while-revalidate=60');
-        else res.set('Cache-Control', 'private, no-store');
+        if (cacheable) res.set('Cache-Control', cache.htmlHeaders({ maxAge: 60 }));
+        else res.set('Cache-Control', cache.htmlHeaders({ private: true }));
         if (robots && robots !== 'index, follow') res.set('X-Robots-Tag', robots);
     }
 
@@ -117,7 +118,7 @@ function createPublicRoutes(ctx) {
         const description = topic ? (topic.description || `Stories on ${topic.name}`) : 'Source-backed stories from OpenVibe.News';
         const file = FEEDS.find((f) => f.type === kind).file;
         const feedUrl = publication.abs(`${base === '/' ? '' : base}/${file}`);
-        res.set('Cache-Control', 'public, max-age=300');
+        res.set('Cache-Control', cache.htmlHeaders({ maxAge: 300 }));
         res.vary('Accept-Encoding');
         if (kind === 'rss') return res.type('application/rss+xml').send(seo.rssFeed({ title, link, description, feedUrl, language: 'en' }, items));
         if (kind === 'json') return res.type('application/feed+json').send(JSON.stringify(seo.jsonFeed({ title, link, feedUrl, description, language: 'en' }, items)));
