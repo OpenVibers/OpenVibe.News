@@ -16,6 +16,7 @@
 const express = require('express');
 const seo = require('openvibe-publishing/seo');
 const sharedSeo = require('openvibe-shared/seo');
+const cache = require('openvibe-shared/cache-policy');
 
 function createDiscoveryRoutes({ config, store, publication, topics }) {
     const router = express.Router();
@@ -31,7 +32,7 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
         return out;
     }
 
-    const xml = (res, body) => res.type('application/xml').set('Cache-Control', 'public, max-age=300').send(body);
+    const xml = (res, body) => res.type('application/xml').set('Cache-Control', cache.htmlHeaders({ maxAge: 300 })).send(body);
 
     router.get('/robots.txt', (_req, res) => {
         const body = [
@@ -42,11 +43,11 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
             '# X-Robots-Tag): retracted stories stay readable but are noindex. A Disallow is not a noindex.',
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/edit', '/clusters/', '/auth/', '/api/', '/internal/'] }),
         ].join('\n');
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(body);
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(body);
     });
 
     router.get('/llms.txt', (_req, res) => {
-        res.type('text/plain').set('Cache-Control', 'public, max-age=3600').send(sharedSeo.llmsTxt({
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsTxt({
             name: 'OpenVibe.News',
             summary: 'A source-backed publication: stories written by OpenVibe.News editors from source items collected by OpenVibe.Sources. Every paragraph cites the sources it rests on.',
             details: 'OpenVibe.News is not an automatic headline generator. Each story page lists its sources (headline, outlet, author and date as the source published them, with links), a timeline, editor-assigned perspective groupings and its full correction history. Full article text from sources is never republished; at most a short summary where the source’s terms allow it. AI-assisted drafts are never published or indexed before a person reviews them. Retracted stories stay at their URL with a retraction notice and are noindex. Append .json to any story URL for the same content as data, including every claim’s source numbers and the Sources item ids.',
