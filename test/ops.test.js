@@ -39,6 +39,13 @@ const { boot, check, done } = require('./helpers/boot');
         assert.match(llms, /^# OpenVibe\.News/);
         assert.match(llms, /not an automatic headline generator/);
         assert.match(llms, /\.json/);
+        const full = await t.get('/llms-full.txt');
+        assert.strictEqual(full.status, 200);
+        assert.match(full.headers.get('content-type'), /^text\/plain/);
+        assert.strictEqual(full.headers.get('cache-control'), 'public, max-age=3600, stale-while-revalidate=3600');
+        assert.match(full.text, /^# OpenVibe\.News/);
+        assert.match(full.text, /source-backed publication/);
+        assert.ok(Buffer.byteLength(full.text, 'utf8') <= 512 * 1024, 'no stories: within maxBytes');
         const idx = (await t.get('/sitemap.xml')).text;
         assert.match(idx, /<sitemapindex/);
         assert.match(idx, /sitemaps\/stories\.xml/);
@@ -47,6 +54,8 @@ const { boot, check, done } = require('./helpers/boot');
         assert.doesNotMatch(empty, /<url>/, 'no stories, no URLs');
         const home = await t.get('/');
         assert.match(home.text, /<meta name="robots" content="noindex, follow">/, 'an empty front page is not offered for indexing');
+        assert.match(home.text, /<meta name="ai-summary" content="[^"]+">/, 'the home carries the site AI summary');
+        assert.match(home.text, /"@type":"WebPage"/, 'and its WebPage JSON-LD twin');
     });
 
     await check('legal pages, 404s and API problems', async () => {

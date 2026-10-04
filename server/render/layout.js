@@ -41,7 +41,8 @@ function setRelease(id) { if (id) RELEASE = String(id); }
 /**
  * o: title, description, decision (required), canonical, type ('website'|'article'), image,
  *    jsonLd [], feeds [{ type, href, title }], body (HTML), viewer, config, csrf,
- *    published, modified, author, prev, next, bodyClass
+ *    published, modified, author, prev, next, bodyClass,
+ *    summary, facts, updated, url (the shell's ai-summary inputs; openvibe-publishing v1.3.0)
  */
 function renderPage(o) {
     if (!o.decision) throw new TypeError('renderPage needs the gate decision');
@@ -74,6 +75,12 @@ function renderPage(o) {
         description: o.description || 'Source-backed news: every claim cites the reports it rests on.',
         canonical: o.canonical,
         decision: o.decision,
+        // The shell builds the AI summary (seo.pageSummary): summary puts <meta name="ai-summary">
+        // and a WebPage JSON-LD tag in <head>; facts/updated/url feed it. Nothing is invented.
+        summary: o.summary,
+        facts: o.facts,
+        updated: o.updated,
+        url: o.url,
         type: o.type || 'website',
         image: o.image,
         author: o.author,

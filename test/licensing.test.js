@@ -74,7 +74,7 @@ const longBody = `${BODY_SENTINEL} ${'The full article text goes on and on. '.re
     await check('no public surface, API response, event or Search document carries licensed text beyond the allowance', async () => {
         const paths = ['/', '/topics', '/topics/space', `/stories/${story.slug}`, `/stories/${story.slug}.json`, `/stories/${story.slug}?group=outlet`, `/stories/${story.slug}?group=perspective`,
             '/feed.xml', '/atom.xml', '/feed.json', '/topics/space/feed.xml', '/topics/space/atom.xml', '/topics/space/feed.json',
-            '/sitemap.xml', '/sitemaps/stories.xml', '/sitemaps/topics.xml', '/robots.txt', '/llms.txt', '/api/v1/stories', `/api/v1/stories/${story.id}`, '/api/v1/topics'];
+            '/sitemap.xml', '/sitemaps/stories.xml', '/sitemaps/topics.xml', '/robots.txt', '/llms.txt', '/llms-full.txt', '/api/v1/stories', `/api/v1/stories/${story.id}`, '/api/v1/topics'];
         let seen = '';
         for (const p of paths) {
             const res = await t.get(p);

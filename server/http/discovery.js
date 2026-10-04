@@ -5,6 +5,8 @@
  *
  *   GET /robots.txt             sitemap location + explicit automated-consumer policy
  *   GET /llms.txt               orientation for language models
+ *   GET /llms-full.txt          the same orientation plus one section per indexable story, each with
+ *                               the editor's opening summary (never the source's full article text)
  *   GET /sitemap.xml            sitemap index over the two sections below
  *   GET /sitemaps/stories.xml   published, INDEXABLE stories only (the gate decides: retracted,
  *                               unsupported, AI-unreviewed and noindex stories never appear);
@@ -17,6 +19,9 @@ const express = require('express');
 const seo = require('openvibe-publishing/seo');
 const sharedSeo = require('openvibe-shared/seo');
 const cache = require('openvibe-shared/cache-policy');
+
+// The one-line site summary /llms.txt, /llms-full.txt and the home page all carry.
+const SITE_SUMMARY = 'A source-backed publication: stories written by OpenVibe.News editors from source items collected by OpenVibe.Sources. Every paragraph cites the sources it rests on.';
 
 function createDiscoveryRoutes({ config, store, publication, topics }) {
     const router = express.Router();
@@ -49,7 +54,7 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
     router.get('/llms.txt', (_req, res) => {
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsTxt({
             name: 'OpenVibe.News',
-            summary: 'A source-backed publication: stories written by OpenVibe.News editors from source items collected by OpenVibe.Sources. Every paragraph cites the sources it rests on.',
+            summary: SITE_SUMMARY,
             details: 'OpenVibe.News is not an automatic headline generator. Each story page lists its sources (headline, outlet, author and date as the source published them, with links), a timeline, editor-assigned perspective groupings and its full correction history. Full article text from sources is never republished; at most a short summary where the source’s terms allow it. AI-assisted drafts are never published or indexed before a person reviews them. Retracted stories stay at their URL with a retraction notice and are noindex. Append .json to any story URL for the same content as data, including every claim’s source numbers and the Sources item ids.',
             sections: [
                 { title: 'Start here', links: [
@@ -63,6 +68,26 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
                 ] },
                 { title: 'Data', links: [{ title: 'Story JSON', url: abs('/'), note: 'append .json to any story URL (/stories/<slug>.json)' }] },
             ],
+        }));
+    });
+
+    router.get('/llms-full.txt', async (_req, res) => {
+        // The gate decides: only indexable stories, and only their editor's opening summary — the
+        // source's full article text is never stored, so it can never appear here.
+        const entries = (await storyEntries()).filter((e) => e.decision.indexable);
+        res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(sharedSeo.llmsFull({
+            site: 'OpenVibe.News',
+            summary: SITE_SUMMARY,
+            base: config.baseUrl,
+            maxBytes: 512 * 1024,
+            sections: [{
+                title: 'Stories',
+                pages: entries.map((e) => ({
+                    title: e.rev.fields.headline,
+                    url: publication.storyUrl(e.story),
+                    text: e.rev.fields.paragraphs && e.rev.fields.paragraphs[0] ? e.rev.fields.paragraphs[0].text : '',
+                })),
+            }],
         }));
     });
 
@@ -100,4 +125,4 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
     return router;
 }
 
-module.exports = { createDiscoveryRoutes };
+module.exports = { createDiscoveryRoutes, SITE_SUMMARY };
