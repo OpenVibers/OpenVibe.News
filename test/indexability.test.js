@@ -107,6 +107,20 @@ async function storyOn(t, headline, items) {
         assert.match(await sitemap(), new RegExp(`<loc>https://openvibe.news/stories/${story.slug}</loc>`));
         assert.strictEqual((await indexEvent(story)).payload.indexability.decision, 'index');
     });
+
+    await check('/llms-full.txt lists only indexable stories, as the editor summary, within maxBytes', async () => {
+        const hidden = await storyOn(t, 'Noindex story kept out of the full file', [feed1]);
+        const listed = await storyOn(t, 'Indexable story carried in the full file', [solo, wire]);
+        const r = await t.get('/llms-full.txt');
+        assert.strictEqual(r.status, 200);
+        assert.match(r.headers.get('content-type'), /^text\/plain/);
+        assert.ok(r.text.includes('Indexable story carried in the full file'), 'the indexable headline is a page title');
+        assert.ok(r.text.includes(`/stories/${listed.slug}`), 'the indexable story URL is listed');
+        assert.ok(!r.text.includes('Noindex story kept out of the full file'), 'a noindex headline never appears');
+        assert.ok(!r.text.includes(`/stories/${hidden.slug}`), 'a noindex story URL never appears');
+        assert.ok(r.text.includes('Officials confirmed on Tuesday'), 'the editor summary text is the page text');
+        assert.ok(Buffer.byteLength(r.text, 'utf8') <= 512 * 1024, 'within maxBytes');
+    });
     await t.close();
 
     const one = await boot({ env: { NEWS_MIN_INDEPENDENT_SOURCES: '1' } });

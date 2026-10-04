@@ -28,6 +28,7 @@ const pages = require('../render/pages');
 const access = require('../domain/access');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const cache = require('openvibe-shared/cache-policy');
+const { SITE_SUMMARY } = require('./discovery');
 
 const PER_PAGE = 20;
 
@@ -80,6 +81,7 @@ function createPublicRoutes(ctx) {
         send(req, res, 200, {
             title: topic ? topic.name : null,
             description: topic ? (topic.description || `Stories on ${topic.name}.`) : 'Source-backed stories: every paragraph cites the reports it rests on.',
+            summary: topic ? undefined : SITE_SUMMARY,
             decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
             canonical, feeds,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,

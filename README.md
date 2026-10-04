@@ -152,7 +152,7 @@ Other tables in the same database:
 | `POST /stories/:slug/comments` | comment on the story's Community thread as the signed-in member (form token) |
 | `/feed.xml`, `/atom.xml`, `/feed.json`, `/topics/:slug/{feed.xml,atom.xml,feed.json}` | feeds (News' own text only) |
 | `/sitemap.xml` → `/sitemaps/stories.xml`, `/sitemaps/topics.xml` | indexable stories and topics only |
-| `/robots.txt`, `/llms.txt` | the automated-consumer policy and machine orientation |
+| `/robots.txt`, `/llms.txt`, `/llms-full.txt` | the automated-consumer policy and machine orientation (llms-full: the same header plus one section per indexable story) |
 | `/edit`, `/edit/stories/:id`, `/clusters/:id` | the editor desk (forms, Network SSO, form tokens; editors only; private, noindex) |
 | `/auth/*` | sign-in; the same session layer as OpenVibe.Community and OpenVibe.Blog |
 | `/internal/events` | the Events webhook (loopback; nginx does not proxy it) |
@@ -229,8 +229,8 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
 
 - **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
-- **Packages** (pinned by release tarball): `openvibe-publishing` v1.2.0 (async PostgreSQL stores: revisions,
-  citations, authorship, seo, index-hooks, ssr, taxonomy slugify, and the shared ingest/publication
+- **Packages** (pinned by release tarball): `openvibe-publishing` v1.3.0 (async PostgreSQL stores: revisions,
+  citations, authorship, seo (ai-summary and llms-full), index-hooks, ssr, taxonomy slugify, and the shared ingest/publication
   chassis: the Sources client, the change-cursor pull, the signed events consumer and the
   gate → document → outbox glue), `openvibe-contracts` v0.79.0,
   `openvibe-shared` v2.6.0 (Frame, app icon, footer, legal, release, metrics, ready, seo),
@@ -282,7 +282,7 @@ Each grant is `[client, capability, audience]`:
 | Useful without JavaScript: the whole editorial journey with forms, and public pages complete in HTML. | `test/nojs.test.js` |
 | AI output is a draft that needs a person's review (AI-assisted too); uncited claims dropped; failure makes no text. | `test/ai.test.js` |
 | The contract proposals are valid and match the code; every emitted event type is declared. | `test/contracts.test.js` |
-| Health, readiness, release, robots, llms.txt, sitemaps, legal, problems, CORS, topics-only seed. | `test/ops.test.js` |
+| Health, readiness, release, robots, llms.txt, llms-full.txt, sitemaps, legal, problems, CORS, topics-only seed. | `test/ops.test.js` |
 
 Not yet demonstrated: ingestion from the deployed OpenVibe.Sources (its seeds are disabled until a
 person verifies their terms; production has 181 ingest runs and 0 items), delivery of a real item
