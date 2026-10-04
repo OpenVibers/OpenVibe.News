@@ -1,25 +1,27 @@
 'use strict';
 
 /**
- * Page shell. Every page is server-rendered through this and is complete without JavaScript:
+ * Page shell. Every page is server-rendered through openvibe-publishing/layout (openvibe-shared/shell
+ * page()) and is complete without JavaScript:
  *   - <head>: title, description, canonical and robots from the indexability gate's decision
- *     (openvibe-publishing/seo metaTags — there is no default that makes a page indexable),
- *     Open Graph/Twitter, JSON-LD, feed links, the shared app icon
- *   - the OpenVibe Frame: navbar.js and theme-loader.js from the Network (progressive), a
- *     <noscript> navigation bar and the server-rendered shared footer (openvibe-shared)
+ *     (there is no default that makes a page indexable), Open Graph/Twitter, JSON-LD, article
+ *     times, prev/next, feed links, the shared app icon, the site stylesheet and the boost marker
+ *   - the OpenVibe Frame: theme-loader, web runtime, navbar and footer from the Network
+ *     (progressive), a <noscript> navigation bar and the server-rendered shared footer
  */
 const crypto = require('crypto');
-const ovServe = require('openvibe-shared/serve');
 const fs = require('fs');
 const path = require('path');
-const seo = require('openvibe-publishing/seo');
-const { escapeHtml: esc } = require('openvibe-publishing/ssr');
-const appIcon = require('openvibe-shared/app-icon');
+const layout = require('openvibe-publishing/layout');
 const frame = require('openvibe-shared/frame');
 
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.News';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+const NAV_LINKS = [
+    { label: 'News', href: '/' },
+    { label: 'Topics', href: '/topics' },
+];
 
 const hashes = new Map();
 function assetVersion(rel) {
@@ -43,29 +45,13 @@ function setRelease(id) { if (id) RELEASE = String(id); }
  */
 function renderPage(o) {
     if (!o.decision) throw new TypeError('renderPage needs the gate decision');
-    const head = seo.metaTags({
-        title: o.title ? `${o.title} · ${SITE_NAME}` : SITE_NAME,
-        description: o.description || 'Source-backed news: every claim cites the reports it rests on.',
-        decision: o.decision,
-        canonical: o.canonical,
-        type: o.type || 'website',
-        siteName: SITE_NAME,
-        image: o.image || undefined,
-        author: o.author || undefined,
-        prev: o.prev || undefined,
-        next: o.next || undefined,
-        jsonLd: (o.jsonLd || []).filter(Boolean),
-    });
     const viewer = o.viewer || { kind: 'anonymous' };
     const signedIn = viewer.kind === 'user';
     const loginNext = encodeURIComponent(o.path || '/');
     const nav = {
         service: 'news',
         apiBase: NETWORK_URL,
-        links: [
-            { label: 'News', href: '/' },
-            { label: 'Topics', href: '/topics' },
-        ],
+        links: NAV_LINKS,
         history: { type: 'page', title: o.title || SITE_NAME },
         silentLogin: `${o.config.baseUrl}/auth/login?silent=1&next={url}`,
         sessionUrl: '/auth/me',
@@ -80,42 +66,34 @@ function renderPage(o) {
     const account = signedIn
         ? `${o.editor ? '<a href="/edit">Editor desk</a> · ' : ''}<a href="/auth/logout?next=${loginNext}">Sign out</a>`
         : `<a href="/auth/login?next=${loginNext}">Sign in with OpenVibe</a>`;
-    return `<!DOCTYPE html>
-<html lang="${esc(o.lang || 'en')}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-${head}
-${o.published ? `<meta property="article:published_time" content="${esc(o.published)}">` : ''}
-${o.modified ? `<meta property="article:modified_time" content="${esc(o.modified)}">` : ''}
-${seo.feedLinks(o.feeds || [])}
-${appIcon.headTags({ site: 'news' })}
-<link rel="stylesheet" href="${asset('css/news.css')}">
-<script src="${ovServe.url('theme-loader.js')}" defer></script>
-<script src="${ovServe.url('navbar.js')}" defer></script>
-<script src="${ovServe.url('footer.js')}" defer></script>
-<meta name="ov-boost" content="news@${esc(RELEASE)}">
-<script src="${ovServe.url('boost.js')}" data-main="#main" defer></script>
-</head>
-<body class="${esc(o.bodyClass || '')}">
-<a class="skip" href="#main">Skip to content</a>
-<div id="navbar-mount"></div>
-${frame.noscriptNav({ name: SITE_NAME, home: '/', links: [{ label: 'News', href: '/' }, { label: 'Topics', href: '/topics' }] })}
-<noscript><div class="account-bar" role="navigation" aria-label="Account">${account}</div></noscript>
-<main id="main" class="page">
-${o.body || ''}
-${o.path === '/' ? frame.shipped({ service: 'news', title: `Recently shipped on ${SITE_NAME}` }) : ''}
-</main>
-${frame.footer(footer)}
-<script>
-window.__OV_PAGE = ${JSON.stringify({ navbar: nav, footer }).replace(/</g, '\\u003c')};
-document.addEventListener('DOMContentLoaded', function () {
-  try { if (window.OpenVibeNavbar) OpenVibeNavbar.init(window.__OV_PAGE.navbar); } catch (e) { /* the Frame is optional */ }
-  try { if (window.OpenVibeFooter) OpenVibeFooter.init(window.__OV_PAGE.footer); } catch (e) { /* */ }
-});
-</script>
-</body>
-</html>`;
+    return layout.renderDocument({
+        site: 'news',
+        siteName: SITE_NAME,
+        lang: o.lang,
+        title: o.title ? `${o.title} · ${SITE_NAME}` : SITE_NAME,
+        description: o.description || 'Source-backed news: every claim cites the reports it rests on.',
+        canonical: o.canonical,
+        decision: o.decision,
+        type: o.type || 'website',
+        image: o.image,
+        author: o.author,
+        jsonLd: o.jsonLd,
+        feeds: o.feeds,
+        published: o.published,
+        modified: o.modified,
+        prev: o.prev,
+        next: o.next,
+        navbar: nav,
+        footer,
+        navLinks: NAV_LINKS,
+        home: '/',
+        css: asset('css/news.css'),
+        release: RELEASE,
+        account,
+        body: o.body,
+        shipped: o.path === '/' ? frame.shipped({ service: 'news', title: `Recently shipped on ${SITE_NAME}` }) : '',
+        bodyClass: o.bodyClass,
+    });
 }
 
 module.exports = { renderPage, asset, assetVersion, setRelease, SITE_NAME, NETWORK_URL };
