@@ -20,6 +20,7 @@
 const express = require('express');
 const ovServe = require('openvibe-shared/serve');
 const frame = require('openvibe-shared/frame');
+const showcase = require('openvibe-shared/showcase');
 const rateLimit = require('express-rate-limit');
 const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
@@ -68,6 +69,24 @@ function createPublicRoutes(ctx) {
     const FEEDS = [{ type: 'rss', label: 'RSS', file: 'feed.xml' }, { type: 'atom', label: 'Atom', file: 'atom.xml' }, { type: 'json', label: 'JSON Feed', file: 'feed.json' }];
     const feedsFor = (base) => FEEDS.map((f) => ({ type: f.type, label: f.label, href: `${base === '/' ? '' : base}/${f.file}`, title: f.label }));
 
+    /** The product's own words above the front page's stories: only what OpenVibe.News does today. */
+    function newsShowcase() {
+        return showcase.hero({
+            eyebrow: 'OpenVibe.News',
+            title: 'News you can', accent: 'check',
+            lede: 'Every paragraph links the reports it rests on. Corrections and retractions stay on the record, and anyone can read without an account.',
+            actions: [{ label: 'Read the stories', href: '#stories', primary: true }, { label: 'Browse topics', href: '/topics' }],
+        }) + showcase.features({
+            title: 'How a story is built',
+            items: [
+                { icon: 'ov:news', title: 'Cited paragraphs', text: 'Each paragraph names the sources behind it, with outlet, authors and date.' },
+                { icon: 'ov:history', title: 'Revisions on the record', text: 'Corrections and retractions are kept and shown, never quietly edited away.' },
+                { icon: 'ov:search', title: 'Source checks', text: 'When a source changes or is removed upstream, the story says so while editors check it.' },
+                { icon: 'ov:community', title: 'Discussion', text: 'Talk about a story on OpenVibe.Community with your OpenVibe account.' },
+            ],
+        });
+    }
+
     async function listing(req, res, { topic = null }) {
         const page = pageNumber(req);
         const path = topic ? publication.topicPath(topic) : '/';
@@ -88,7 +107,10 @@ function createPublicRoutes(ctx) {
             jsonLd: topic
                 ? [seo.structuredData.breadcrumbs(crumbs.map((c) => ({ name: c.name, url: c.url ? publication.abs(c.url) : canonical })))]
                 : [{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'OpenVibe.News', url: publication.abs('/') }],
-            body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs }) : pages.home({ items, pager, topics: await topics.list(), feeds }),
+            // The front page opens with what OpenVibe.News is for (openvibe-shared/showcase), then the stories.
+            ...(!topic && pager.page === 1 ? { styles: [showcase.STYLESHEET] } : {}),
+            body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs })
+                : (pager.page === 1 ? newsShowcase() : '') + pages.home({ items, pager, topics: await topics.list(), feeds, showcase: pager.page === 1 }),
         }, { cacheable: true });
     }
 

@@ -42,7 +42,8 @@ function setRelease(id) { if (id) RELEASE = String(id); }
  * o: title, description, decision (required), canonical, type ('website'|'article'), image,
  *    jsonLd [], feeds [{ type, href, title }], body (HTML), viewer, config, csrf,
  *    published, modified, author, prev, next, bodyClass,
- *    summary, facts, updated, url (the shell's ai-summary inputs; openvibe-publishing v1.3.0)
+ *    summary, facts, updated, url (the shell's ai-summary inputs; openvibe-publishing v1.3.0),
+ *    styles [openvibe-shared stylesheet names]
  */
 function renderPage(o) {
     if (!o.decision) throw new TypeError('renderPage needs the gate decision');
@@ -95,6 +96,7 @@ function renderPage(o) {
         navLinks: NAV_LINKS,
         home: '/',
         css: asset('css/news.css'),
+        styles: o.styles,   // openvibe-shared stylesheet names (the home page's showcase.css)
         release: RELEASE,
         account,
         body: o.body,

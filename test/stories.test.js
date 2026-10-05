@@ -141,8 +141,16 @@ const BODY = [
     await check('home, topic page, feeds and sitemap list the published story; its text reaches feeds, source summaries do not', async () => {
         const home = await t.get('/');
         assert.match(home.text, /Europa Clipper launches for Jupiter/);
+        // Page 1 opens with the showcase (openvibe-shared/showcase): its hero is the one h1, its stylesheet is linked,
+        // and the stories still follow under "Latest stories".
+        assert.ok(home.text.includes('class="sc-hero'), 'the home page opens with the showcase hero');
+        assert.match(home.text, /<link rel="stylesheet" href="[^"]*showcase\.css[^"]*">/);
+        assert.strictEqual((home.text.match(/<h1[\s>]/g) || []).length, 1, 'one h1 on the home page');
+        assert.ok(home.text.indexOf('class="sc-hero') < home.text.indexOf('Europa Clipper launches for Jupiter'), 'the showcase sits above the stories');
+        assert.match(home.text, /<h2>Latest stories<\/h2>/);
         const topic = await t.get('/topics/space');
         assert.match(topic.text, /Europa Clipper launches for Jupiter/);
+        assert.ok(!topic.text.includes('sc-hero') && !topic.text.includes('showcase.css'), 'a topic page has no showcase');
         const rss = await t.get('/feed.xml');
         assert.match(rss.text, /<guid isPermaLink="false">tag:openvibe.news,2026:story\/sty_/);
         assert.doesNotMatch(rss.text, /spacecraft lifted off/, 'a source summary is never fed');
