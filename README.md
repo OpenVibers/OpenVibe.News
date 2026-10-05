@@ -6,7 +6,7 @@
 **Status:** alpha (roadmap Wave 17, News half). The service runs and its tests pass. It is
 **deployed internally, not launched**: it runs on the production host on 127.0.0.1:4820 only
 (release `1802e7d`, `/api/ready` 200), while `openvibe.news` still shows its placeholder from
-OpenVibe.Sites. Its capabilities and service manifest are registered in openvibe-contracts v0.21.0.
+OpenVibe.Sites. Its capabilities and service manifest are registered in openvibe-contracts v0.97.0.
 The production database holds 12 topics and no stories: it has not ingested anything from the
 running OpenVibe.Sources service, because every Sources seed is disabled.
 **Domain:** `openvibe.news` · **Port:** 4820 · **Service id:** `news`
@@ -203,7 +203,7 @@ five minutes and are never built for a viewer.
 | `news.story.retracted` | public for a listable story; the retraction note |
 | `news.index_document.upserted` / `.deleted` | `search.index-document@1` documents (provenance: the Sources items and the AI run) and tombstones, with a monotonic index revision |
 
-## Capabilities (registered in openvibe-contracts v0.21.0)
+## Capabilities (registered in openvibe-contracts v0.97.0)
 
 Service tokens use audience `openvibe.news`, one capability per route; the editor the service acts
 for goes in `X-OV-Subject` and must be an editor:
@@ -215,9 +215,10 @@ for goes in `X-OV-Subject` and must be an editor:
 
 Browser and app user JWTs are judged as editors (`NEWS_EDITORS` subjects and Network admins).
 Grants for these ids are decided with the contracts library's matching rule
-(`server/auth/capabilities.js`). The ids and the service manifest are released in
-openvibe-contracts v0.21.0; `docs/capabilities-proposal/` and `docs/service-manifest-proposal.json`
-are the proposals they were released from.
+(`server/auth/capabilities.js`, which delegates straight to `capabilities.check` now that the ids
+are released). The ids and the service manifest are released in openvibe-contracts (pinned at
+v0.97.0); `docs/capabilities-proposal/` and `docs/service-manifest-proposal.json` stay as the
+proposals they were released from.
 
 Called elsewhere, as the service principal `news`: `sources.item.read` and optionally
 `sources.source.read` (Sources), `events.event.publish` and `events.subscription.manage` (Events),
@@ -232,7 +233,7 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
 - **Packages** (pinned by release tarball): `openvibe-publishing` v1.3.0 (async PostgreSQL stores: revisions,
   citations, authorship, seo (ai-summary and llms-full), index-hooks, ssr, taxonomy slugify, and the shared ingest/publication
   chassis: the Sources client, the change-cursor pull, the signed events consumer and the
-  gate → document → outbox glue), `openvibe-contracts` v0.79.0,
+  gate → document → outbox glue), `openvibe-contracts` v0.97.0,
   `openvibe-shared` v2.6.0 (Frame, app icon, footer, legal, release, metrics, ready, seo),
   `openvibe-sdk` v0.25.0 (db with after-commit hooks, PostgreSQL events outbox and inbox, webhook signatures v2,
   service tokens, Network sign-in (`openvibe-sdk/sso`) and the service outbox (`openvibe-sdk/events`), per-actor limits, testing).
@@ -302,7 +303,7 @@ exists:
 4. **Persistence and end-to-end workflows:** done in tests and deployed on the host (loopback
    only); not yet against live Sources items, since no news source is enabled.
 5. **Capability and event registration against OpenVibe.Contracts:** done (openvibe-contracts
-   v0.21.0).
+   v0.97.0).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. Nothing
    to migrate; the seed is topics only; the threat review is below.
 7. **Acceptance tests:** done.
@@ -407,7 +408,7 @@ First install (done once; kept for a rebuild):
    `http://127.0.0.1:4820/internal/events`). The cursor pull starts on its own.
 7. **Sources:** News shows nothing until a news source is enabled in OpenVibe.Sources (terms
    verified by a person) and an editor publishes a story.
-8. **Contracts:** done: the capabilities and manifest are released in openvibe-contracts v0.21.0,
+8. **Contracts:** done: the capabilities and manifest are released in openvibe-contracts v0.97.0,
    and CI's contracts check runs against them.
 9. **Launch:** in the same release, remove `openvibe.news` from OpenVibe.Sites and flip the Network
    hub entry (see the launch rule above).

@@ -1,18 +1,19 @@
 'use strict';
 /**
- * The proposals the lead releases in the next openvibe-contracts version are valid against the
- * released schemas, match what the code enforces, and do not collide with released ids; every
- * event type the code emits is declared.
+ * The capability and service-manifest proposals in docs/ are valid against the installed
+ * openvibe-contracts (which now release them), match what the code enforces, and do not collide with
+ * ids owned by other services; every event type the code emits is declared.
  */
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
 const contracts = require('openvibe-contracts');
 const { check, done } = require('./helpers/boot');
-const { PROPOSED } = require('../server/auth/capabilities');
+const { CAPABILITIES } = require('../server/auth/capabilities');
 
 const ROOT = path.join(__dirname, '..');
 const DIR = path.join(ROOT, 'docs', 'capabilities-proposal');
+const IDS = new Set(Object.values(CAPABILITIES));
 
 (async () => {
     const files = fs.readdirSync(DIR).filter((f) => f.endsWith('.json'));
@@ -32,14 +33,14 @@ const DIR = path.join(ROOT, 'docs', 'capabilities-proposal');
     });
 
     await check('the charter capabilities are all present as 3-segment ids', async () => {
-        for (const id of ['news.story.create', 'news.story.revise', 'news.story.publish', 'news.cluster.read', 'news.source.attach', 'news.timeline.update']) assert.ok(PROPOSED.has(id), id);
+        for (const id of ['news.story.create', 'news.story.revise', 'news.story.publish', 'news.cluster.read', 'news.source.attach', 'news.timeline.update']) assert.ok(IDS.has(id), id);
     });
 
     await check('the proposals are exactly the capabilities the code enforces, and every route guard names one', async () => {
-        assert.deepStrictEqual(caps.map((c) => c.id).sort(), [...PROPOSED].sort());
-        assert.deepStrictEqual([...manifest.capabilities].sort(), [...PROPOSED].sort());
+        assert.deepStrictEqual(caps.map((c) => c.id).sort(), [...IDS].sort());
+        assert.deepStrictEqual([...manifest.capabilities].sort(), [...IDS].sort());
         const api = fs.readFileSync(path.join(ROOT, 'server', 'http', 'api.js'), 'utf8');
-        for (const m of api.matchAll(/(?:guard\(|write\('[a-z]+', '[^']+', )'(news\.[a-z_.]+)'/g)) assert.ok(PROPOSED.has(m[1]), m[1]);
+        for (const m of api.matchAll(/(?:guard\(|write\('[a-z]+', '[^']+', )'(news\.[a-z_.]+)'/g)) assert.ok(IDS.has(m[1]), m[1]);
     });
 
     await check('the service manifest proposal is a valid registry.service-manifest@1', async () => {
