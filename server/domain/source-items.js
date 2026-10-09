@@ -31,6 +31,8 @@ const { ids } = require('openvibe-contracts');
 const { createChangeCursor, pullChanges, normalize } = require('openvibe-publishing/ingest');
 
 const NEAR_TITLE = { anyOutlet: 0.9, sameOutlet: 0.75, windowMs: 48 * 3600 * 1000 };
+// Only an http(s) URL is kept as an item's link: a publisher's javascript: or data: URL would become a link on a page.
+const httpUrl = (u) => { try { const x = new URL(String(u || '')); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; } };
 const newItemId = (now) => `nsi_${ids.ulid(now)}`;
 const CURSOR = 'sources';
 
@@ -84,8 +86,8 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
         const published = item.published_at && Number.isFinite(Date.parse(item.published_at)) ? new Date(Date.parse(item.published_at)).toISOString() : null;
         return {
             headline,
-            canonical_url: item.canonical_url || null,
-            url_key: normalize.urlKey(item.canonical_url),
+            canonical_url: httpUrl(item.canonical_url),
+            url_key: httpUrl(item.canonical_url) ? normalize.urlKey(item.canonical_url) : null,
             outlet: await outletFor(item),
             authors: JSON.stringify(authors),
             published_at: published,

@@ -135,7 +135,7 @@ function createApi(ctx) {
         const topic = req.query.topic ? await topics.bySlug(req.query.topic) : null;
         if (req.query.topic && !topic) throw new ApiError(404, 'topic.not_found', 'No such topic');
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
-        const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+        const offset = Math.min(Math.max(parseInt(req.query.offset, 10) || 0, 0), 100000);
         const { total, stories: rows } = await stories.listPublished({ topicId: topic ? topic.id : null, limit, offset });
         const items = await reading.listItems(rows);
         return { total, stories: items.map((i) => ({ id: i.story.id, url: publication.abs(i.url), headline: i.headline, state: i.story.state, topic: i.topic ? i.topic.name : null, sources: i.sourceCount, first_published_at: iso(i.published_at), updated_at: i.updated_at })) };

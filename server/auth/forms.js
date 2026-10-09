@@ -17,8 +17,10 @@ function csrfToken(config, viewer) {
 
 function checkCsrf(config, viewer, token) {
     const expected = csrfToken(config, viewer);
-    if (!expected || typeof token !== 'string' || token.length !== expected.length) return false;
-    return crypto.timingSafeEqual(Buffer.from(token), Buffer.from(expected));
+    if (!expected || typeof token !== 'string') return false;
+    const a = Buffer.from(token); const b = Buffer.from(expected);
+    // Compare byte lengths, not string lengths: a non-ASCII token of the right length would make timingSafeEqual throw.
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
 module.exports = { csrfToken, checkCsrf };

@@ -13,6 +13,8 @@ const { html: h, raw } = ssr;
 
 const dateLabel = (v) => (v ? new Date(v).toISOString().slice(0, 10) : null);
 const time = (v) => raw(ssr.timeTag(v == null ? null : new Date(v).toISOString(), { label: dateLabel(v) || undefined }));
+// A source's link comes from a publisher through OpenVibe.Sources: only http(s) becomes a link (never javascript: or data:).
+const httpHref = (u) => { try { const x = new URL(String(u)); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; } };
 const cites = (ns) => h`<sup class="cites">${ns.map((n, i) => h`${i ? ',' : ''}<a href="#source-${n}" aria-label="source ${n}">${n}</a>`)}</sup>`;
 
 function storyListItem(it) {
@@ -66,7 +68,7 @@ function sourceRow(s) {
     }
     return h`<tr id="source-${s.n}"${s.upstream_changed ? raw(' class="changed"') : ''}>
 <td>${s.n}</td>
-<td>${s.url ? h`<a href="${s.url}" rel="noopener nofollow">${s.headline}</a>` : s.headline}${s.summary ? h`<p class="source-summary">${s.summary}</p>` : ''}${s.upstream_changed ? h`<p class="notice small">The source changed after this revision; editors are checking it.</p>` : ''}${s.status === 'removed' ? h`<p class="notice small">Removed upstream${s.removed_reason ? h`: ${s.removed_reason}` : ''}.</p>` : ''}</td>
+<td>${httpHref(s.url) ? h`<a href="${httpHref(s.url)}" rel="noopener nofollow">${s.headline}</a>` : s.headline}${s.summary ? h`<p class="source-summary">${s.summary}</p>` : ''}${s.upstream_changed ? h`<p class="notice small">The source changed after this revision; editors are checking it.</p>` : ''}${s.status === 'removed' ? h`<p class="notice small">Removed upstream${s.removed_reason ? h`: ${s.removed_reason}` : ''}.</p>` : ''}</td>
 <td>${s.outlet}</td>
 <td>${s.authors && s.authors.length ? s.authors.join(', ') : raw('<span class="meta">not stated</span>')}</td>
 <td>${s.published_at ? time(Date.parse(s.published_at)) : raw('<span class="meta">not stated</span>')}</td>
@@ -157,4 +159,4 @@ function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
-module.exports = { home, topicsIndex, topicPage, storyPage, commentsSection, message, storyList, time, dateLabel, cites };
+module.exports = { home, topicsIndex, topicPage, storyPage, commentsSection, message, storyList, time, dateLabel, cites, httpHref };

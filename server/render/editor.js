@@ -6,7 +6,7 @@
  * no-store and noindex.
  */
 const ssr = require('openvibe-publishing/ssr');
-const { time } = require('./pages');
+const { time, httpHref } = require('./pages');
 
 const { html: h, raw } = ssr;
 const csrfField = (csrf) => h`<input type="hidden" name="_csrf" value="${csrf}">`;
@@ -59,7 +59,7 @@ ${flash(message)}
 <p class="meta">${cluster.id} · ${cluster.status}${cluster.merged_into ? h` into <a href="/clusters/${cluster.merged_into}">${cluster.merged_into}</a>` : ''}${cluster.split_from ? h` · split from <a href="/clusters/${cluster.split_from}">${cluster.split_from}</a>` : ''} · items grouped by shared named entities and terms within a time window; every membership says why.</p>
 <form method="post" action="/clusters/${cluster.id}/split">${csrfField(csrf)}
 <table><thead><tr><th>Split</th><th>Headline</th><th>Outlet</th><th>Published</th><th>Status</th><th>Why here</th></tr></thead><tbody>
-${items.map((it) => h`<tr><td>${open ? h`<input type="checkbox" name="items" value="${it.id}" aria-label="split ${it.headline}">` : ''}</td><td>${it.canonical_url ? h`<a href="${it.canonical_url}" rel="noopener nofollow">${it.headline}</a>` : it.headline}<br><span class="meta">${it.id} · Sources ${it.sources_item_id} r${it.sources_revision}</span></td><td>${it.outlet}</td><td>${it.published_at ? it.published_at.slice(0, 10) : 'not stated'}</td><td>${it.status}${it.dedupe ? h`<br><span class="meta">${parse(it.dedupe, {}).rule}: ${parse(it.dedupe, {}).detail}</span>` : ''}${it.removed_reason ? h`<br><span class="meta">${it.removed_reason}</span>` : ''}</td><td class="meta">${why(it.cluster_reason)}</td></tr>`)}
+${items.map((it) => h`<tr><td>${open ? h`<input type="checkbox" name="items" value="${it.id}" aria-label="split ${it.headline}">` : ''}</td><td>${httpHref(it.canonical_url) ? h`<a href="${httpHref(it.canonical_url)}" rel="noopener nofollow">${it.headline}</a>` : it.headline}<br><span class="meta">${it.id} · Sources ${it.sources_item_id} r${it.sources_revision}</span></td><td>${it.outlet}</td><td>${it.published_at ? it.published_at.slice(0, 10) : 'not stated'}</td><td>${it.status}${it.dedupe ? h`<br><span class="meta">${parse(it.dedupe, {}).rule}: ${parse(it.dedupe, {}).detail}</span>` : ''}${it.removed_reason ? h`<br><span class="meta">${it.removed_reason}</span>` : ''}</td><td class="meta">${why(it.cluster_reason)}</td></tr>`)}
 </tbody></table>
 ${open ? h`<label for="split-reason">Reason for the split</label><input id="split-reason" name="reason" maxlength="500"><button type="submit">Split the ticked items into a new cluster</button>` : ''}
 </form>
