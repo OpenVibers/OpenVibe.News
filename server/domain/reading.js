@@ -103,7 +103,7 @@ function createReading({ store, config, stories, publication, people, topics }) 
             authors: m.authors.map((a) => ({ name: a.name })),
             publisher: { name: 'OpenVibe.News', url: config.baseUrl },
             section: m.topic ? m.topic.name : undefined, inLanguage: 'en',
-            citations: m.sources.filter((s) => s.status !== 'removed' && s.url).map((s) => ({ url: s.url, title: s.headline })),
+            citations: m.sources.filter((s) => s.status !== 'removed' && /^https?:\/\//i.test(String(s.url || ''))).map((s) => ({ url: s.url, title: s.headline })),
         });
     }
 

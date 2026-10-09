@@ -64,7 +64,8 @@ function createPublicRoutes(ctx) {
     }
     const notFound = (req, res) => messagePage(req, res, 404, 'Not found', 'There is nothing at this address.', { href: '/', label: 'OpenVibe.News' });
 
-    const pageNumber = (req) => { const n = parseInt(req.query.page, 10); return Number.isInteger(n) && n > 0 ? n : 1; };
+    // At most page 1000: a far page is a far OFFSET scan on a public route (past the last page answers 404 anyway).
+    const pageNumber = (req) => { const n = parseInt(req.query.page, 10); return Number.isInteger(n) && n > 0 ? Math.min(n, 1000) : 1; };
     const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
     const FEEDS = [{ type: 'rss', label: 'RSS', file: 'feed.xml' }, { type: 'atom', label: 'Atom', file: 'atom.xml' }, { type: 'json', label: 'JSON Feed', file: 'feed.json' }];
     const feedsFor = (base) => FEEDS.map((f) => ({ type: f.type, label: f.label, href: `${base === '/' ? '' : base}/${f.file}`, title: f.label }));

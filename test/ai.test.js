@@ -34,6 +34,16 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.strictEqual(r.status, 403, 'AI cannot publish');
     });
 
+    await check('only OpenVibe.AI may deliver as AI: another service or an app saying X-OV-Origin: ai is refused', async () => {
+        const body = { headline: 'x', paragraphs, expected_revision: 0, authorship: { workflow: wf } };
+        let r = await t.get(`/api/v1/stories/${story.id}/revisions`, { as: t.network.serviceToken('live', ['news.story.revise']), headers: aiHeaders, json: body });
+        assert.strictEqual(r.status, 403, r.text);
+        assert.strictEqual(r.json().code, 'request.origin_not_ai');
+        const app = t.network.signService({ sub: 'app:app_01J8ZQ4Y7N3M2K1H0G9F8E7D6C', aud: ['openvibe.news'], cap: ['news.story.revise'], actorType: 'app' });
+        r = await t.get(`/api/v1/stories/${story.id}/revisions`, { as: app, headers: aiHeaders, json: body });
+        assert.strictEqual(r.status, 403, r.text);
+    });
+
     let rev;
     await check('an AI draft is an AI-generated revision that cannot be published before a person reviews it', async () => {
         const r = await t.get(`/api/v1/stories/${story.id}/revisions`, { as: aiToken, headers: aiHeaders, json: { headline: 'Europa Clipper is on its way to Jupiter', paragraphs, expected_revision: 0, authorship: { workflow: wf } } });

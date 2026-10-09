@@ -53,6 +53,9 @@ function createViewerResolver({ auth, config, people }) {
         }
         const originHeader = req.get('x-ov-origin');
         if (originHeader && originHeader !== 'ai' && originHeader !== 'user') throw new ViewerError(400, 'request.invalid_origin', 'X-OV-Origin must be "ai" or "user"');
+        // An AI delivery writes a revision without an editor (a person reviews it before it is published), so only
+        // OpenVibe.AI itself may claim it; any other service or app saying X-OV-Origin: ai is refused.
+        if (originHeader === 'ai' && claims.sub !== 'svc:ai') throw new ViewerError(403, 'request.origin_not_ai', 'only OpenVibe.AI (svc:ai) delivers AI output');
         const subjectHeader = req.get('x-ov-subject');
         let subject = null;
         if (subjectHeader) {
