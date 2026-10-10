@@ -4,9 +4,9 @@
 > public correction history.
 
 **Status:** alpha (roadmap Wave 17, News half). The service runs and its tests pass. It is
-**deployed internally, not launched**: it runs on the production host on 127.0.0.1:4820 only
-(release `1802e7d`, `/api/ready` 200), while `openvibe.news` still shows its placeholder from
-OpenVibe.Sites. Its capabilities and service manifest are registered in openvibe-contracts v0.97.0.
+**public at `openvibe.news` since 2026-10-09**, after an independent pre-launch security review whose
+fixes shipped first; the domain no longer shows the OpenVibe.Sites placeholder. Its capabilities and
+service manifest are registered in openvibe-contracts v0.97.0.
 The production database holds 12 topics and no stories: it has not ingested anything from the
 running OpenVibe.Sources service, because every Sources seed is disabled.
 **Domain:** `openvibe.news` · **Port:** 4820 · **Service id:** `news`
@@ -293,25 +293,24 @@ exist), and an OpenVibe.AI run (OpenVibe.AI runs on the host, but News in produc
 
 ## Launch rule
 
-This repository alone doesn't make the product live. `openvibe.news` keeps its placeholder on
-[OpenVibers/OpenVibe.Sites](https://github.com/OpenVibers/OpenVibe.Sites) until all of plan §12.12
-exists:
+This repository alone doesn't make the product live: the launch is a coordinated change across
+OpenVibe.Sites, routing and the ecosystem registry. All of plan §12.12 was met on 2026-10-09, and
+the service is now public at `openvibe.news`:
 
 1. **Runtime, health, readiness, observability:** done.
 2. **Canonical identity and auth:** done (Network SSO, subjects, service tokens).
 3. **SSR public routes useful without JS:** done.
-4. **Persistence and end-to-end workflows:** done in tests and deployed on the host (loopback
-   only); not yet against live Sources items, since no news source is enabled.
+4. **Persistence and end-to-end workflows:** done in tests and deployed on the host; not yet
+   against live Sources items, since no news source is enabled.
 5. **Capability and event registration against OpenVibe.Contracts:** done (openvibe-contracts
    v0.97.0).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. Nothing
    to migrate; the seed is topics only; the threat review is below.
 7. **Acceptance tests:** done.
 
-The launch release removes `openvibe.news` from `OpenVibe.Sites/sites.json`, switches routing
-(nginx vhost, DNS, TLS), flips the Network hub entry and registers maturity in the ecosystem
-registry, together. A placeholder never counts as an implemented service, and this README doesn't
-call the service live.
+The launch release removed `openvibe.news` from `OpenVibe.Sites/sites.json`, switched routing
+(nginx vhost, DNS, TLS), flipped the Network hub entry and registered maturity in the ecosystem
+registry, together.
 
 ## Security and threat review
 
@@ -410,8 +409,8 @@ First install (done once; kept for a rebuild):
    verified by a person) and an editor publishes a story.
 8. **Contracts:** done: the capabilities and manifest are released in openvibe-contracts v0.97.0,
    and CI's contracts check runs against them.
-9. **Launch:** in the same release, remove `openvibe.news` from OpenVibe.Sites and flip the Network
-   hub entry (see the launch rule above).
+9. **Launch:** done on 2026-10-09: `openvibe.news` was removed from OpenVibe.Sites, routing switched
+   and the Network hub entry flipped (see the launch rule above).
 
 ---
 

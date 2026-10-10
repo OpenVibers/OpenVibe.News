@@ -35,8 +35,8 @@
   "ai": "optional seam (news.summarize_story, news.compare_perspectives) tested against a mock; not configured in production (OV_AI_INTERNAL_URL unset); OpenVibe.AI output only ever lands as a draft that needs a person's review",
   "seed": "topics only (12 in production); no stories, source items or clusters",
   "deployed": true,
-  "deployment": "Deployed with `sudo ovhost deploy news`: unit openvibe-news, 127.0.0.1:4820 loopback only; on 2026-09-23 /api/ready answered 200 and the production database held 12 topics and 0 stories. Deployed internally, not launched: openvibe.news still serves the OpenVibe.Sites placeholder until a person verifies a news source's terms, enables it in Sources, and an editor publishes a reviewed story",
-  "placeholderInSites": true,
+  "deployment": "Deployed with `sudo ovhost deploy news`: unit openvibe-news on 127.0.0.1:4820 behind nginx; on 2026-09-23 /api/ready answered 200 and the production database held 12 topics and 0 stories. Public at openvibe.news since 2026-10-09, after an independent pre-launch security review whose fixes shipped first; the OpenVibe.Sites placeholder is gone. The database still holds no stories: no source item has arrived while every Sources seed is disabled",
+  "placeholderInSites": false,
   "features": [
     "Sources ingestion by Events subscription and cursor pull, with dedupe",
     "failed ingestion recorded, never fabricated",
