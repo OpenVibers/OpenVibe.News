@@ -419,6 +419,6 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 <!-- versions:start -->
 - openvibe-contracts: v0.126.0
 - openvibe-sdk: v0.35.0
-- openvibe-shared: v2.20.0
+- openvibe-shared: v2.20.3
 - openvibe-publishing: v1.3.0
 <!-- versions:end -->
