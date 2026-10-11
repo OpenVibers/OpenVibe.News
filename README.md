@@ -7,8 +7,9 @@
 **public at `openvibe.news` since 2026-10-09**, after an independent pre-launch security review whose
 fixes shipped first; the domain no longer shows the OpenVibe.Sites placeholder. Its capabilities and
 service manifest are registered in openvibe-contracts v0.97.0.
-The production database holds 12 topics and no stories: it has not ingested anything from the
-running OpenVibe.Sources service, because every Sources seed is disabled.
+Since 2026-10-11 production ingests from the running OpenVibe.Sources service (NASA news releases, GOV.UK
+news, the EU press corner): 70 source items in 18 clusters, 12 topics, and no stories yet, because a story
+exists only once an editor opens one from a cluster and publishes it (below).
 **Domain:** `openvibe.news` · **Port:** 4820 · **Service id:** `news`
 **Plan:** OpenVibe End-to-End Realignment & Implementation Plan, revision 3 (20 Sep 2026), §12.7; roadmap §15.13, §29, §32.
 **License:** AGPL-3.0 (same as every OpenVibe service).
@@ -285,8 +286,8 @@ Each grant is `[client, capability, audience]`:
 | The contract proposals are valid and match the code; every emitted event type is declared. | `test/contracts.test.js` |
 | Health, readiness, release, robots, llms.txt, llms-full.txt, sitemaps, legal, problems, CORS, topics-only seed. | `test/ops.test.js` |
 
-Not yet demonstrated: ingestion from the deployed OpenVibe.Sources (its seeds are disabled until a
-person verifies their terms; production has 181 ingest runs and 0 items), delivery of a real item
+Demonstrated in production on 2026-10-11: ingestion from the deployed OpenVibe.Sources (70 items, 18
+clusters). Not yet demonstrated: a published story (it waits on an editor), delivery of a real item
 through the running OpenVibe.Events (the `sources.item.*` and `sources.fetch.failed` subscriptions
 exist), and an OpenVibe.AI run (OpenVibe.AI runs on the host, but News in production has no
 `OV_AI_INTERNAL_URL`; the seam is tested against a mock of its runs API).

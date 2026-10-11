@@ -92,6 +92,11 @@ const BODY = [
         const r = await t.api(`/stories/${story.id}/publish`, { json: {} });
         assert.strictEqual(r.status, 200, r.text);
         assert.strictEqual(r.json().story.state, 'published');
+        // The editor/API DTO carries the gate's real decision, not a promise that serializes as {}.
+        assert.deepStrictEqual(r.json().story.indexability, { indexable: true, robots: 'index, follow', reasons: [] });
+        const detail = (await t.api(`/stories/${story.id}`)).json();
+        assert.deepStrictEqual(detail.story.indexability, { indexable: true, robots: 'index, follow', reasons: [] });
+        assert.deepStrictEqual(detail.story.publishable, []);
         const page = await t.get('/stories/europa-clipper-launches-for-jupiter');
         assert.strictEqual(page.status, 200);
         assert.match(page.text, /<h1>Europa Clipper launches for Jupiter<\/h1>/);
