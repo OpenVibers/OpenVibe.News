@@ -102,13 +102,17 @@ function createApi(ctx) {
     async function storyDto(story) {
         const head = await stories.head(story);
         const topic = await publication.topicOf(story);
+        // The gate's decision for the published revision. Awaited here: a returned promise would
+        // serialize as {} in the JSON, leaving the editor/API without the real robots decision.
+        const publishedRev = story.published_revision ? await stories.revision(story, story.published_revision) : null;
+        const indexability = publishedRev ? await publication.decide(story, publishedRev) : null;
         return {
             id: story.id, slug: story.slug, url: publication.storyUrl(story), state: story.state, cluster_id: story.cluster_id,
             topic: topic ? topic.slug : null, working_headline: story.working_headline, noindex: Boolean(story.noindex),
             published_revision: story.published_revision, first_published_at: iso(story.first_published_at), published_at: iso(story.published_at), retracted_at: iso(story.retracted_at),
             head: head ? { revision: head.number, headline: head.fields.headline, paragraphs: head.fields.paragraphs, authorship: head.meta.authorship || null, system: head.meta.system || null, gaps: head.meta.gaps || null, author: head.author, created_at: head.createdAt } : null,
             publishable: head ? await stories.problems(story, head) : [{ code: 'story.no_text', detail: 'Nothing has been written yet' }],
-            indexability: story.published_revision ? (async () => { const d = await publication.decide(story, await stories.revision(story, story.published_revision)); return { indexable: d.indexable, robots: d.robots, reasons: d.reasons }; })() : null,
+            indexability: indexability ? { indexable: indexability.indexable, robots: indexability.robots, reasons: indexability.reasons } : null,
             sources: (await stories.sources(story, { includeDetached: true })).map((s) => ({ n: s.n, perspective_id: s.perspective_id, detached_at: iso(s.detached_at), item: itemDto(s.item) })),
             timeline: (await stories.timeline(story)).map((t) => ({ id: t.id, occurred_on: t.occurred_on, text: t.text, source_item_id: t.source_item_id })),
             perspectives: (await stories.perspectives(story)).map((p) => ({ id: p.id, label: p.label, description: p.description })),
