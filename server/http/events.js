@@ -36,7 +36,7 @@ function createEvents({ config, store, ingest, sources, log = console }) {
         if (!delivery) return http.sendProblem(res, 401, 'news.bad_signature', { detail: 'X-OpenVibe-Signature-V2 does not verify or is outside the replay window', ctx });
         const event = delivery.event;
         if (!event || typeof event.event_id !== 'string' || !EVT_RE.test(event.event_id)) {
-            return http.sendProblem(res, 400, 'news.bad_delivery', { detail: 'body must be { event: <envelope>, seq }', ctx });
+            return http.sendProblem(res, 400, 'news.bad_delivery', { detail: 'body must be { event: <envelope> }', ctx });
         }
         const attempt = Number(req.get('x-openvibe-delivery-attempt')) || 1;
         const type = String(event.event_type || '');
