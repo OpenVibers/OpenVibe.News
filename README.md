@@ -159,6 +159,8 @@ Other tables in the same database:
 | `/internal/events` | the Events webhook (loopback; nginx does not proxy it) |
 | `/api/health`, `/api/ready`, `/release.json`, `/metrics` | health, truthful readiness, release, metrics (`/metrics` loopback only) |
 
+Sitemap entries carry lastmod from each story's latest publication or topic page's latest change.
+
 ### Discoverability (roadmap §32)
 
 - Robots meta, canonical and `X-Robots-Tag` come from the `openvibe-publishing/seo` gate with

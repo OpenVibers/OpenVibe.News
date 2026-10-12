@@ -6,6 +6,17 @@
  * published with a revision, and non-editors refused.
  */
 const assert = require('assert');
+
+function assertSitemapLastmods(xml, tag = 'url') {
+    const entries = [...xml.matchAll(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'g'))];
+    for (const [, body] of entries) {
+        const match = /<lastmod>(\d{4}-\d{2}-\d{2})<\/lastmod>/.exec(body);
+        assert.ok(match, body);
+        assert.strictEqual(new Date(match[1]).toISOString().slice(0, 10), match[1]);
+    }
+    return entries;
+}
+
 const contracts = require('openvibe-contracts');
 const { boot, check, done, launchReports } = require('./helpers/boot');
 
@@ -165,8 +176,13 @@ const BODY = [
         assert.strictEqual(other.json().items.length, 0);
         const sm = await t.get('/sitemaps/stories.xml');
         assert.match(sm.text, /<loc>https:\/\/openvibe.news\/stories\/europa-clipper-launches-for-jupiter<\/loc>/);
+        assertSitemapLastmods(sm.text);
+        const storyRow = await t.db().prepare('SELECT published_at FROM news_stories WHERE id = ?').get(story.id);
+        assert.ok(sm.text.includes(`<lastmod>${new Date(storyRow.published_at).toISOString().slice(0, 10)}</lastmod>`));
         const tm = await t.get('/sitemaps/topics.xml');
         assert.match(tm.text, /\/topics\/space/);
+        assertSitemapLastmods(tm.text);
+        assertSitemapLastmods((await t.get('/sitemap.xml')).text, 'sitemap');
     });
 
     await check('a correction is published with the next revision and shows in the correction history', async () => {
