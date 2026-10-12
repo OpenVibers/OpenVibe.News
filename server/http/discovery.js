@@ -10,7 +10,7 @@
  *   GET /sitemap.xml            sitemap index over the two sections below
  *   GET /sitemaps/stories.xml   published, INDEXABLE stories only (the gate decides: retracted,
  *                               unsupported, AI-unreviewed and noindex stories never appear);
- *                               lastmod = the published revision's real time
+ *                               lastmod = the story's latest publication time
  *   GET /sitemaps/topics.xml    topic pages that have indexable stories
  *
  * Built from the database on every request, never from the viewer.
@@ -91,35 +91,41 @@ function createDiscoveryRoutes({ config, store, publication, topics }) {
         }));
     });
 
-    router.get('/sitemap.xml', async (_req, res) => {
-        const entries = (await storyEntries()).filter((e) => e.decision.indexable);
-        const newest = entries.length ? entries.map((e) => e.rev.createdAt).sort().pop() : null;
-        xml(res, seo.sitemapIndex([
-            { loc: abs('/sitemaps/stories.xml'), ...(newest ? { lastmod: newest } : {}) },
-            { loc: abs('/sitemaps/topics.xml'), ...(newest ? { lastmod: newest } : {}) },
-        ]));
-    });
-
-    router.get('/sitemaps/stories.xml', async (_req, res) => {
-        xml(res, seo.sitemap((await storyEntries()).map((e) => ({ loc: publication.storyUrl(e.story), lastmod: e.rev.createdAt, decision: e.decision }))).files[0]);
-    });
-
-    router.get('/sitemaps/topics.xml', async (_req, res) => {
+    async function topicEntries(stories) {
         const byTopic = new Map();
-        for (const e of await storyEntries()) {
+        for (const e of stories) {
             if (!e.decision.indexable || !e.story.topic_id) continue;
-            const t = e.rev.createdAt;
+            const t = e.story.published_at;
             if (!byTopic.has(e.story.topic_id) || byTopic.get(e.story.topic_id) < t) byTopic.set(e.story.topic_id, t);
         }
         const entries = [];
-        for (const [id, lastmod] of byTopic) {
+        for (const [id, storyLastmod] of byTopic) {
             const topic = await topics.byId(id);
             if (!topic || topic.status !== 'active') continue;
             const path = publication.topicPath(topic);
             const decision = seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: abs(path), wordCount: 0 }, { policy: { minWords: 0 }, now: store.now() });
-            entries.push({ loc: abs(path), lastmod, decision });
+            entries.push({ loc: abs(path), lastmod: new Date(Math.max(storyLastmod, topic.updated_at)).toISOString(), decision });
         }
-        xml(res, seo.sitemap(entries).files[0]);
+        return entries;
+    }
+
+    router.get('/sitemap.xml', async (_req, res) => {
+        const stories = await storyEntries();
+        const indexed = stories.filter((e) => e.decision.indexable);
+        const topics = (await topicEntries(stories)).filter((e) => e.decision.indexable);
+        const newest = (times) => times.length ? new Date(Math.max(...times)).toISOString() : undefined;
+        xml(res, seo.sitemapIndex([
+            { loc: abs('/sitemaps/stories.xml'), lastmod: newest(indexed.map((e) => e.story.published_at)) },
+            { loc: abs('/sitemaps/topics.xml'), lastmod: newest(topics.map((e) => Date.parse(e.lastmod))) },
+        ]));
+    });
+
+    router.get('/sitemaps/stories.xml', async (_req, res) => {
+        xml(res, seo.sitemap((await storyEntries()).map((e) => ({ loc: publication.storyUrl(e.story), lastmod: e.story.published_at, decision: e.decision }))).files[0]);
+    });
+
+    router.get('/sitemaps/topics.xml', async (_req, res) => {
+        xml(res, seo.sitemap(await topicEntries(await storyEntries())).files[0]);
     });
 
     return router;
