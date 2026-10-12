@@ -301,8 +301,8 @@ the service is now public at `openvibe.news`:
 1. **Runtime, health, readiness, observability:** done.
 2. **Canonical identity and auth:** done (Network SSO, subjects, service tokens).
 3. **SSR public routes useful without JS:** done.
-4. **Persistence and end-to-end workflows:** done in tests and deployed on the host; not yet
-   against live Sources items, since no news source is enabled.
+4. **Persistence and end-to-end workflows:** done in tests and deployed on the host; since
+   2026-10-11 against live Sources items (70 items, 18 clusters).
 5. **Capability and event registration against OpenVibe.Contracts:** done (openvibe-contracts
    v0.97.0).
 6. **Migration and seed strategy, threat review, sitemap/robots/feed behaviour:** done. Nothing
