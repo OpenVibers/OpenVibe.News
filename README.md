@@ -24,7 +24,7 @@ When a source changes or is withdrawn upstream, the story is flagged and a pendi
 prepared; published text never changes silently. Full article text from sources is never stored,
 shown, fed or indexed.
 
-News publishes nothing until an editor does: the only seed is the topic list.
+News publishes nothing until an editor does: the only seed is the topic list. Until then, and beside the stories after, **the wire** (`/wire`, and "From the wire" on the front page) shows what the sources report, grouped by cluster: each line is the outlet's own headline, outlet, date and link (the fields the licensing rules let News keep), never News' writing; duplicates and reports removed upstream leave it; `/wire` is `noindex, follow`.
 
 ## Owns
 

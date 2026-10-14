@@ -66,3 +66,8 @@ form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
 .ov-diff { white-space: pre-wrap; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.7rem; } body { font-size: 16px; } table { font-size: .85rem; } }
+.wire { margin-top: 32px; border-top: 1px solid var(--border, #1f2d47); }
+.wire-list, .wire-items { list-style: none; padding: 0; }
+.wire-cluster { padding: 10px 0; border-bottom: 1px solid var(--border, #1f2d47); overflow-wrap: anywhere; }
+.wire-lead { margin: 0; font-weight: 600; }
+.wire a { color: var(--text-primary); }

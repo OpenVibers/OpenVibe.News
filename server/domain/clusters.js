@@ -174,6 +174,24 @@ function createClusters({ store, config, outbox }) {
         audit: async (id) => (await q.auditFor.all(id, id)).map(shapeAudit),
         auditEntry: async (id) => shapeAudit(await q.audit.get(String(id || ''))),
 
+        /**
+         * The public wire: open clusters, newest activity first, each with its active items (no duplicates, nothing
+         * removed upstream) as the sources state them: headline, outlet, date and link. Clusters left with no active
+         * item are skipped. Only the fields the licensing rules let News store are read.
+         */
+        async wire({ limit = 30 } = {}) {
+            const out = [];
+            for (const c of await api.recent({ limit: limit * 2 })) {
+                const items = (await q.members.all(c.id)).filter((i) => i.status === 'active' && !i.removed_at && i.canonical_url)
+                    .map((i) => ({ id: i.id, headline: i.headline, url: i.canonical_url, outlet: i.outlet, published_at: i.published_at }));
+                if (!items.length) continue;
+                items.sort((a, b) => String(b.published_at || '').localeCompare(String(a.published_at || '')));
+                out.push({ id: c.id, label: c.label, updated: c.window_end, items });
+                if (out.length >= limit) break;
+            }
+            return out;
+        },
+
         /** Open clusters, newest activity first (the editor dashboard). */
         async recent({ limit = 50 } = {}) {
             return await db.prepare("SELECT * FROM news_story_clusters WHERE status = 'open' ORDER BY window_end DESC, id DESC LIMIT ?").all(limit);
