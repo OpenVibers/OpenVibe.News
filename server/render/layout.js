@@ -73,7 +73,8 @@ function renderPage(o) {
         site: 'news',
         siteName: SITE_NAME,
         lang: o.lang,
-        title: o.title ? `${o.title} · ${SITE_NAME}` : SITE_NAME,
+        // The front page's title says what the site is (search results show it); every other page is "<page> · OpenVibe.News".
+        title: o.title ? `${o.title} · ${SITE_NAME}` : o.path === '/' ? `${SITE_NAME}: source-backed news, every claim cited` : SITE_NAME,
         description: o.description || 'Source-backed news: every claim cites the reports it rests on.',
         canonical: o.canonical,
         decision: o.decision,
