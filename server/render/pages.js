@@ -37,7 +37,7 @@ function feedLinksHtml(feeds) {
 
 // With the showcase above it (page 1), the showcase hero is the page's h1 and says what the site is,
 // so the list header is a plain "Latest stories" h2; later pages keep the site's own h1 and lede.
-function home({ items, pager, topics, feeds, showcase = false }) {
+function home({ items, pager, topics, feeds, showcase = false, wire = '' }) {
     return String(h`${showcase ? h`<header class="site-header"><h2>Latest stories</h2>
 ${raw(feedLinksHtml(feeds))}
 </header>` : h`<header class="site-header">
@@ -45,9 +45,41 @@ ${raw(feedLinksHtml(feeds))}
 <p class="lede">Source-backed stories. Every paragraph cites the reports it rests on; corrections and retractions stay on the record.</p>
 ${raw(feedLinksHtml(feeds))}
 </header>`}
-<section id="stories" aria-label="Stories">${storyList(items, 'No stories have been published yet. OpenVibe.News publishes only what an editor has written from its sources.')}</section>
+<section id="stories" aria-label="Stories">${storyList(items, wire ? 'No stories have been published yet: editors write them from the sources, and every paragraph cites them. Until then, the wire below shows what the sources report.' : 'No stories have been published yet. OpenVibe.News publishes only what an editor has written from its sources.')}</section>
 ${raw(ssr.paginationHtml(pager))}
+${raw(wire)}
 ${topics.length ? h`<section class="side" aria-label="Topics"><h2>Topics</h2><ul class="topic-list">${topics.map((t) => h`<li><a href="/topics/${t.slug}">${t.name}</a></li>`)}</ul></section>` : ''}`);
+}
+
+// The wire: what the sources report, grouped, before (or without) an editor's story. Each line is the outlet's own
+// headline and link; nothing here is written by News.
+const WIRE_NOTE = 'Grouped automatically from the reports OpenVibe.Sources collects. Nothing here is written by OpenVibe.News: each line is the outlet\'s own headline and links to its report.';
+
+function wireCluster(c, { brief = false } = {}) {
+    const items = brief ? c.items.slice(0, 1) : c.items;
+    const outlets = [...new Set(c.items.map((i) => i.outlet).filter(Boolean))];
+    return h`<li class="wire-cluster" id="wire-${c.id}">
+${brief ? h`<p class="wire-lead">${wireLink(items[0])}</p><p class="meta">${time(items[0].published_at)} · ${c.items.length} ${c.items.length === 1 ? 'report' : 'reports'}${outlets.length ? h` (${outlets.slice(0, 4).join(', ')}${outlets.length > 4 ? ` and ${outlets.length - 4} more` : ''})` : ''}</p>`
+        : h`<ul class="wire-items">${items.map((i) => h`<li>${wireLink(i)} <span class="meta">${i.outlet ? h`${i.outlet} · ` : ''}${time(i.published_at)}</span></li>`)}</ul>`}
+</li>`;
+}
+function wireLink(i) {
+    const href = httpHref(i.url);
+    return href ? h`<a href="${href}" rel="nofollow noopener" target="_blank">${i.headline}</a>` : h`${i.headline}`;
+}
+
+/** The front page's wire section: the latest clusters, one line each. */
+function wireSection(clusters) {
+    if (!clusters.length) return '';
+    return String(h`<section class="wire" id="wire" aria-labelledby="wire-h"><h2 id="wire-h">From the wire</h2>
+<p class="meta">${WIRE_NOTE}</p>
+<ol class="wire-list">${clusters.map((c) => wireCluster(c, { brief: true }))}</ol>
+<p><a href="/wire">The whole wire</a></p></section>`);
+}
+
+function wirePage({ clusters }) {
+    return String(h`<header class="site-header"><h1>The wire</h1><p class="lede">${WIRE_NOTE} Stories, which editors write with every paragraph cited, are on <a href="/">the front page</a>.</p></header>
+${clusters.length ? h`<ol class="wire-list wide">${clusters.map((c) => wireCluster(c))}</ol>` : h`<p class="empty">The sources have not reported anything new yet.</p>`}`);
 }
 
 function topicsIndex({ topics }) {
@@ -159,4 +191,4 @@ function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
-module.exports = { home, topicsIndex, topicPage, storyPage, commentsSection, message, storyList, time, dateLabel, cites, httpHref };
+module.exports = { home, topicsIndex, topicPage, storyPage, commentsSection, message, storyList, time, dateLabel, cites, httpHref, wireSection, wirePage };

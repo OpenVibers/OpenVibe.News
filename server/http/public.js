@@ -5,6 +5,8 @@
  *
  *   GET /                         published stories, newest first (retracted ones stay, labelled)
  *   GET /topics, /topics/:slug    topics and each topic's stories
+ *   GET /wire                     the wire: what the sources report, grouped, as the outlets' own headlines and links
+ *                                 (the front page shows its latest clusters); labelled, noindex, follow
  *   GET /stories/:slug            a story (…/:slug.json: the same story as data); ?group=outlet|perspective
  *                                 lets the reader choose how the source table is framed
  *   POST /stories/:slug/comments  comment (the story's Community thread) as the signed-in member
@@ -34,7 +36,7 @@ const { SITE_SUMMARY } = require('./discovery');
 const PER_PAGE = 20;
 
 function createPublicRoutes(ctx) {
-    const { config, store, stories, publication, reading, topics, viewers, community, discussion } = ctx;
+    const { config, store, stories, publication, reading, topics, viewers, community, discussion, clusters } = ctx;
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
 
@@ -95,6 +97,8 @@ function createPublicRoutes(ctx) {
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
         const items = await reading.listItems(rows);
+        // The front page's wire (render/pages.js): with clusters to show, the page is not empty even before a story.
+        const wire = !topic && page === 1 ? await clusters.wire({ limit: 8 }) : [];
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         const feeds = feedsFor(path);
         const crumbs = topic ? [{ name: 'OpenVibe.News', url: '/' }, { name: 'Topics', url: '/topics' }, { name: topic.name }] : null;
@@ -102,7 +106,7 @@ function createPublicRoutes(ctx) {
             title: topic ? topic.name : null,
             description: topic ? (topic.description || `Stories on ${topic.name}.`) : 'Source-backed stories: every paragraph cites the reports it rests on.',
             summary: topic ? undefined : SITE_SUMMARY,
-            decision: pageDecision(canonical, { empty: total === 0, query: ['page'] }),
+            decision: pageDecision(canonical, { empty: total === 0 && !wire.length, query: ['page'] }),
             canonical, feeds,
             prev: pager.prev ? pager.prev.href : null, next: pager.next ? pager.next.href : null,
             jsonLd: topic
@@ -111,7 +115,7 @@ function createPublicRoutes(ctx) {
             // The front page opens with what OpenVibe.News is for (openvibe-shared/showcase), then the stories.
             ...(!topic && pager.page === 1 ? { styles: [showcase.STYLESHEET] } : {}),
             body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs })
-                : (pager.page === 1 ? newsShowcase() : '') + pages.home({ items, pager, topics: await topics.list(), feeds, showcase: pager.page === 1 }),
+                : (pager.page === 1 ? newsShowcase() : '') + pages.home({ items, pager, topics: await topics.list(), feeds, showcase: pager.page === 1, wire: pages.wireSection(wire) }),
         }, { cacheable: true });
     }
 
@@ -122,6 +126,15 @@ function createPublicRoutes(ctx) {
         body: frame.updatesBody({ service: 'news', siteName: 'OpenVibe.News' }) + `<script src="${ovServe.url('shipped.js')}" defer></script>`,
     }, { cacheable: true }));
     router.get('/', wrap(async (req, res) => await listing(req, res, {})));
+    // The wire (render/pages.js): what the sources report, grouped, with the outlets' own headlines and links. Not
+    // indexed: it is other publishers' headlines, not News' writing; its links are followed.
+    router.get('/wire', wrap(async (req, res) => {
+        const decision = seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: seo.canonicalUrl(config.baseUrl, '/wire'), wordCount: 0, noindex: true }, { policy: { minWords: 0 }, now: store.now() });
+        send(req, res, 200, {
+            title: 'The wire', description: 'What the sources OpenVibe.News follows report now, grouped, before an editor writes a story.',
+            decision, canonical: `${config.baseUrl}/wire`, body: pages.wirePage({ clusters: await clusters.wire({ limit: 40 }) }),
+        }, { cacheable: true });
+    }));
 
     router.get('/topics', wrap(async (req, res) => {
         send(req, res, 200, { title: 'Topics', description: 'Topics on OpenVibe.News.', decision: pageDecision('/topics'), canonical: publication.abs('/topics'), body: pages.topicsIndex({ topics: await topics.list() }) }, { cacheable: true });

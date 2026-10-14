@@ -21,6 +21,7 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const NAV_LINKS = [
     { label: 'News', href: '/' },
     { label: 'Topics', href: '/topics' },
+    { label: 'Wire', href: '/wire' },
 ];
 
 const hashes = new Map();
