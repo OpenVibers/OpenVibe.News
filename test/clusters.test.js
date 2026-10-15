@@ -111,6 +111,42 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.deepStrictEqual(audit, ['merge', 'reverse_merge', 'split', 'reverse_split']);
     });
 
+    await check('a cluster is matched on its core, not the union of its reports: it cannot snowball', async () => {
+        const { compare, coreMin, signature } = require('../server/domain/clusters');
+        assert.deepStrictEqual([1, 2, 3, 5, 6, 196].map(coreMin), [1, 1, 2, 2, 3, 66]);
+        // Nine statements from one outlet: "statement", "ambassador" and "security" are in all nine; a railway report
+        // is in the union once. A new railway report shares three union terms but none of the core.
+        const terms = { statement: 9, ambassador: 9, security: 9, railway: 1, british: 1, scheme: 1, great: 1 };
+        const cluster = { terms: JSON.stringify(terms), entities: JSON.stringify({ un: 9, 'great british railways': 1 }) };
+        const railway = signature({ headline: 'Great British Railways confirms its apprenticeship scheme', summary: 'The railway scheme opens to young people.' });
+        assert.strictEqual(compare(railway, cluster, 1).joins, true, 'the union would take it');
+        const m = compare(railway, cluster, 9);
+        assert.strictEqual(m.joins, false, JSON.stringify(m));
+        assert.strictEqual(m.coreMin, 4);
+        const statement = signature({ headline: 'UN ambassador statement on security in Haiti', summary: 'The ambassador gave a statement to the security council.' });
+        assert.strictEqual(compare(statement, cluster, 9).joins, true, 'a report on the story itself still joins');
+    });
+
+    await check('resplit regroups a polluted cluster: the unrelated report splits off, audited and reversible', async () => {
+        const merged = await t.api(`/clusters/${main}/merge`, { json: { other: lone, reason: 'pollute it for the test' } });
+        assert.strictEqual(merged.status, 200, merged.text);
+        assert.strictEqual((await item(unrelated.id)).cluster_id, main);
+        const dry = await t.ctx.clusters.resplit(null, main, { dryRun: true });
+        assert.strictEqual(dry.groups, 2, JSON.stringify(dry.grouping));
+        assert.strictEqual((await item(unrelated.id)).cluster_id, main, 'a dry run changes nothing');
+        const r = await t.ctx.clusters.resplit(null, main);
+        assert.strictEqual(r.splits.length, 1);
+        assert.deepStrictEqual(r.splits[0].item_ids, [(await item(unrelated.id)).id], 'only the bakery report moves');
+        assert.strictEqual(r.splits[0].action, 'split');
+        assert.strictEqual(r.splits[0].actor, 'svc:news');
+        assert.notStrictEqual((await item(unrelated.id)).cluster_id, main);
+        assert.strictEqual((await item(reports.a.id)).cluster_id, main, 'the first report\'s group stays');
+        assert.strictEqual((await t.ctx.clusters.resplit(null, main, { dryRun: true })).groups, 1, 'a clean cluster stays whole');
+        const back = await t.api(`/clusters/audit/${r.splits[0].id}/reverse`, { json: { reason: 'undo the resplit' } });
+        assert.strictEqual(back.status, 200, back.text);
+        assert.strictEqual((await item(unrelated.id)).cluster_id, main);
+    });
+
     await t.close();
     done();
 })();
