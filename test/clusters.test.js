@@ -10,7 +10,7 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
 (async () => {
     const t = await boot();
     const reports = launchReports(t.sources);
-    const other = t.sources.addItem({ source_key: 'paper-b', title: 'Clipper mission team answers questions about Jupiter cruise', url: 'https://paper-b.example/qa', published_at: '2026-09-22T10:30:00Z' });
+    const other = t.sources.addItem({ source_key: 'paper-b', title: 'Clipper mission team answers questions about Jupiter cruise', url: 'https://paper-b.example/qa', summary: 'After the Europa Clipper launch, NASA mission scientists explained the long cruise to Jupiter.', published_at: '2026-09-22T10:30:00Z' });
     const unrelated = t.sources.addItem({ source_key: 'site-c', title: 'Local bakery wins regional sourdough prize', url: 'https://site-c.example/bakery', published_at: '2026-09-22T10:40:00Z' });
     await t.pull();
     const item = async (itm) => await t.db().prepare('SELECT * FROM news_source_items WHERE sources_item_id = ?').get(itm);
@@ -125,6 +125,23 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.strictEqual(m.coreMin, 4);
         const statement = signature({ headline: 'UN ambassador statement on security in Haiti', summary: 'The ambassador gave a statement to the security council.' });
         assert.strictEqual(compare(statement, cluster, 9).joins, true, 'a report on the story itself still joins');
+    });
+
+    await check('dates never join reports, and neither do an outlet\'s own boilerplate words', async () => {
+        const { signature, commonWords, compare } = require('../server/domain/clusters');
+        const sig = signature({ headline: 'Statement on Tuesday 13 October 2026 at 10:00 EDT', summary: 'Published in October.' });
+        assert.ok(!sig.terms.some((w) => /^(tuesday|13|october|2026|edt)$/.test(w)), sig.terms.join(','));
+        const report = (source, headline) => ({ source_key: source, sig: signature({ headline }) });
+        const pool = ['Haiti sanctions', 'Libya talks', 'Yemen escalation', 'Syria sovereignty', 'Colombia peace'].map((x) => report('govuk', `UK statement at the UN Security Council on ${x}`));
+        const common = commonWords('govuk', pool);
+        assert.ok(common.has('statement') && common.has('council'), [...common].join(','));
+        assert.ok(!common.has('haiti'), 'a story\'s own words stay');
+        assert.strictEqual(commonWords('govuk', pool.slice(0, 4)).size, 0, 'four reports are too few to call anything boilerplate');
+        const cluster = { terms: {}, entities: {} };
+        for (const w of pool[0].sig.terms) cluster.terms[w] = 1;
+        for (const w of pool[0].sig.entities) cluster.entities[w] = 1;
+        assert.strictEqual(compare(pool[1].sig, cluster, 1).joins, true, 'without the pool, the boilerplate joins two different statements');
+        assert.strictEqual(compare(pool[1].sig, cluster, 1, common).joins, false, 'with it, they stay apart');
     });
 
     await check('resplit regroups a polluted cluster: the unrelated report splits off, audited and reversible', async () => {
