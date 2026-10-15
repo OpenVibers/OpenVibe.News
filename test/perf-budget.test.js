@@ -18,7 +18,7 @@ const BUDGETS = {
     jsRawKB: 245,   // 239.1 (212.2 before openvibe-shared/shell's web-runtime.js)
     jsBrotliKB: 59,   // 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 2 (news.css + showcase.css, home page 1 only)
-    cssRawKB: 17.5,   // 15.5 (5.2 before showcase.css)
+    cssRawKB: 18.5,   // 15.5 (5.2 before showcase.css); 18.2 with the front page aligned to the showcase (2026-10-15)
     cssBrotliKB: 4.5,   // 3.9 (1.4 before showcase.css)
     externalFiles: 1,   // 0
 };
