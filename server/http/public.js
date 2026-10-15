@@ -116,7 +116,7 @@ function createPublicRoutes(ctx) {
             // The front page opens with what OpenVibe.News is for (openvibe-shared/showcase), then the stories.
             ...(!topic && pager.page === 1 ? { styles: [showcase.STYLESHEET] } : {}),
             body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs })
-                : (pager.page === 1 ? newsShowcase() : '') + pages.home({ items, pager, topics: await topics.list(), feeds, showcase: pager.page === 1, wire: pages.wireSection(wire) }),
+                : (pager.page === 1 ? newsShowcase() : '') + pages.home({ items, pager, topics: await topics.list(), feeds, showcase: pager.page === 1, wire: pages.wireSection(wire), briefs: pager.page === 1 && briefs ? (await briefs.latest(12)).filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length).slice(0, 4) : [] }),
         }, { cacheable: true });
     }
 

@@ -37,7 +37,7 @@ function feedLinksHtml(feeds) {
 
 // With the showcase above it (page 1), the showcase hero is the page's h1 and says what the site is,
 // so the list header is a plain "Latest stories" h2; later pages keep the site's own h1 and lede.
-function home({ items, pager, topics, feeds, showcase = false, wire = '' }) {
+function home({ items, pager, topics, feeds, showcase = false, wire = '', briefs = [] }) {
     return String(h`${showcase ? h`<header class="site-header"><h2>Latest stories</h2>
 ${raw(feedLinksHtml(feeds))}
 </header>` : h`<header class="site-header">
@@ -45,10 +45,21 @@ ${raw(feedLinksHtml(feeds))}
 <p class="lede">Source-backed stories. Every paragraph cites the reports it rests on; corrections and retractions stay on the record.</p>
 ${raw(feedLinksHtml(feeds))}
 </header>`}
-<section id="stories" aria-label="Stories">${storyList(items, wire ? 'No stories have been published yet: editors write them from the sources, and every paragraph cites them. Until then, the wire below shows what the sources report.' : 'No stories have been published yet. OpenVibe.News publishes only what an editor has written from its sources.')}</section>
+<section id="stories" aria-label="Stories">${storyList(items, wire || briefs.length ? `No stories have been published yet: editors write them from the sources, and every paragraph cites them. Until then, ${briefs.length ? 'the AI briefs and the wire below show' : 'the wire below shows'} what the sources report.` : 'No stories have been published yet. OpenVibe.News publishes only what an editor has written from its sources.')}</section>
 ${raw(ssr.paginationHtml(pager))}
+${raw(briefsSection(briefs))}
 ${raw(wire)}
 ${topics.length ? h`<section class="side" aria-label="Topics"><h2>Topics</h2><ul class="topic-list">${topics.map((t) => h`<li><a href="/topics/${t.slug}">${t.name}</a></li>`)}</ul></section>` : ''}`);
+}
+
+/** The front page's latest AI briefs (server/domain/briefs.js), labelled as AI, each opening on its first paragraph. */
+function briefsSection(briefs) {
+    if (!briefs.length) return '';
+    return String(h`<section class="home-briefs" aria-labelledby="briefs-h"><h2 id="briefs-h">AI briefs</h2>
+<p class="meta">What the reports on a subject say, summarized by OpenVibe.AI with every paragraph linked to its reports. Written by AI, not by an editor.</p>
+<ol class="story-list">${briefs.map((b) => h`<li class="story-item"><h3 class="story-item-title"><a href="/briefs/${b.cluster_id}">${b.headline || b.label}</a> <span class="badge">AI</span></h3>
+<p class="meta">${time(b.window_end)} · from ${b.item_count} reports</p>${b.paragraphs[0] ? h`<p class="summary">${b.paragraphs[0].text.length > 240 ? `${b.paragraphs[0].text.slice(0, 237)}…` : b.paragraphs[0].text}</p>` : ''}</li>`)}</ol>
+<p><a href="/briefs">All AI briefs</a></p></section>`);
 }
 
 // The wire: what the sources report, grouped, before (or without) an editor's story. Each line is the outlet's own
