@@ -28,6 +28,7 @@ const seo = require('openvibe-publishing/seo');
 const ssr = require('openvibe-publishing/ssr');
 const { renderPage } = require('../render/layout');
 const pages = require('../render/pages');
+const briefPages = require('../render/briefs');
 const access = require('../domain/access');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const cache = require('openvibe-shared/cache-policy');
@@ -36,7 +37,7 @@ const { SITE_SUMMARY } = require('./discovery');
 const PER_PAGE = 20;
 
 function createPublicRoutes(ctx) {
-    const { config, store, stories, publication, reading, topics, viewers, community, discussion, clusters } = ctx;
+    const { config, store, stories, publication, reading, topics, viewers, community, discussion, clusters, briefs } = ctx;
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
 
@@ -134,6 +135,65 @@ function createPublicRoutes(ctx) {
             title: 'The wire', description: 'What the sources OpenVibe.News follows report now, grouped, before an editor writes a story.',
             decision, canonical: `${config.baseUrl}/wire`, body: pages.wirePage({ clusters: await clusters.wire({ limit: 40 }) }),
         }, { cacheable: true });
+    }));
+
+    // ── AI briefs and the live view (domain/briefs.js, render/briefs.js) ──
+    // Briefs are AI text: labelled, every paragraph cited, never a story and never indexed. A reader may ask for another
+    // tone or the outlets' comparison (a POST, from this site, a few an address and a few dozen an hour in all), never a
+    // crawler following a link.
+    const noindex = (path) => seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: seo.canonicalUrl(config.baseUrl, path), wordCount: 0, noindex: true }, { policy: { minWords: 0 }, now: store.now() });
+    const BRIEF_ID = /^clu_[0-9A-HJKMNP-TV-Z]{26}$/;
+    const makeLimit = rateLimit({ windowMs: 10 * 60_000, limit: 5, standardHeaders: true, legacyHeaders: false, keyGenerator: (req) => req.ip,
+        handler: (req, res) => messagePage(req, res, 429, 'Too many requests', 'Wait a few minutes, then ask again.', { href: `/briefs/${req.params.id}`, label: 'Back to the brief' }) });
+    const runs = { hour: 0, at: 0 };
+    const RUNS_AN_HOUR = 40;
+    const sameSite = (req) => { const site = String(req.get('sec-fetch-site') || ''); return site ? site === 'same-origin' : String(req.get('origin') || '') === config.baseUrl; };
+    const canMake = () => Boolean(briefs && config.briefs.enabled && ctx.ai && ctx.ai.enabled);
+
+    router.get('/briefs', wrap(async (req, res) => {
+        send(req, res, 200, { title: 'AI briefs', description: 'What the reports on a subject say, summarized by AI with every paragraph linked to its reports.', decision: noindex('/briefs'), canonical: `${config.baseUrl}/briefs`, localStyles: ['css/briefs.css'], body: briefPages.briefsIndex({ briefs: briefs ? await briefs.latest(40) : [] }) }, { cacheable: true });
+    }));
+
+    router.get('/briefs/:id', wrap(async (req, res) => {
+        const id = String(req.params.id || '');
+        const tone = briefPages.TONES.some(([t]) => t === req.query.tone) ? String(req.query.tone) : 'neutral';
+        const got = BRIEF_ID.test(id) && briefs ? await briefs.get(id, { kind: 'summary', tone }) : null;
+        if (!got || !got.reports.length) return notFound(req, res);
+        const persp = await briefs.get(id, { kind: 'perspectives', tone: 'neutral' });
+        const notice = req.query.made === '1' ? 'Written just now.' : (req.query.failed ? String(req.query.failed).slice(0, 200) : null);
+        send(req, res, 200, {
+            title: `${got.brief && got.brief.headline ? got.brief.headline : got.cluster.label} (AI brief)`,
+            description: 'An AI summary of the reports on this subject, every paragraph linked to its reports.',
+            decision: noindex(`/briefs/${id}`), canonical: `${config.baseUrl}/briefs/${id}`, localStyles: ['css/briefs.css'],
+            body: briefPages.briefPage({ ...got, tone, perspectives: persp ? persp.brief : null, canMake: canMake(), notice }),
+        }, { cacheable: !notice });
+    }));
+
+    router.post('/briefs/:id/make', makeLimit, express.urlencoded({ extended: false, limit: '4kb' }), wrap(async (req, res) => {
+        const id = String(req.params.id || '');
+        if (!BRIEF_ID.test(id) || !canMake()) return notFound(req, res);
+        if (!sameSite(req)) return messagePage(req, res, 403, 'Not from this site', 'Ask from the brief\'s own page.', { href: `/briefs/${id}`, label: 'Back to the brief' });
+        const kind = req.body && req.body.kind === 'perspectives' ? 'perspectives' : 'summary';
+        const tone = briefPages.TONES.some(([t]) => t === (req.body && req.body.tone)) ? req.body.tone : 'neutral';
+        const back = `/briefs/${id}${tone !== 'neutral' ? `?tone=${tone}&` : '?'}`;
+        if (Date.now() - runs.at > 3_600_000) { runs.at = Date.now(); runs.hour = 0; }
+        if (runs.hour >= RUNS_AN_HOUR) return res.redirect(303, `${back}failed=${encodeURIComponent('Many briefs were asked for this hour. Try again later.')}`);
+        runs.hour += 1;
+        try {
+            await briefs.make(id, { kind, tone });
+        } catch (err) {
+            return res.redirect(303, `${back}failed=${encodeURIComponent(err.status === 422 ? err.message : 'OpenVibe.AI could not write it just now. Try again in a few minutes.')}`);
+        }
+        return res.redirect(303, `${back}made=1`);
+    }));
+
+    router.get('/live', wrap(async (req, res) => {
+        const list = await clusters.wire({ limit: 40 });
+        const now = store.now();
+        const breaking = new Set(list.filter((c) => c.items.filter((i) => i.published_at && now - Date.parse(i.published_at) <= 2 * 3_600_000).length >= 3).map((c) => c.id));
+        const briefIds = new Set(briefs ? (await briefs.latest(200)).map((b) => b.cluster_id) : []);
+        res.set('Refresh', '60');
+        send(req, res, 200, { title: 'Live', description: 'The newest reports from the sources OpenVibe.News follows, as they arrive, with what is breaking.', decision: noindex('/live'), canonical: `${config.baseUrl}/live`, localStyles: ['css/briefs.css'], body: briefPages.livePage({ clusters: list, briefIds, breaking }) }, { cacheable: true });
     }));
 
     router.get('/topics', wrap(async (req, res) => {

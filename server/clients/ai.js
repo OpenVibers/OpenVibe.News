@@ -29,11 +29,12 @@ function createAi({ config, fetchImpl = globalThis.fetch }) {
     }) : null;
 
     /** sources: [{ id (nsi_…), sources_item_id, headline, url, outlet, authors, published_at, retrieved_at, summary }] in citation order. */
-    async function run(workflow, { topic, sources }) {
+    async function run(workflow, { topic, sources, tone = null }) {
         if (!enabled) throw new AiError('ai.not_configured', 'OpenVibe.AI is not configured (OV_AI_INTERNAL_URL)', 503);
         if (!WORKFLOWS.includes(workflow)) throw new AiError('ai.unknown_workflow', `workflow must be one of ${WORKFLOWS.join(', ')}`, 422);
         const input = {
             ...(topic ? { topic: String(topic).slice(0, 300) } : {}),
+            ...(tone && workflow === 'news.summarize_story' ? { tone } : {}),
             sources: sources.slice(0, 50).map((s) => ({
                 source_type: 'news.article', source_id: s.sources_item_id, title: s.headline, ...(s.url ? { url: s.url } : {}),
                 ...(s.authors && s.authors.length ? { author: s.authors.join(', ').slice(0, 200) } : {}),

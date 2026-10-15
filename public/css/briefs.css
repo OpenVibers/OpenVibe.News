@@ -1,0 +1,17 @@
+/* OpenVibe.News — the AI briefs and live pages only (render/briefs.js), so news.css stays inside its budget. */
+.badge-ai { background: color-mix(in srgb, #a78bfa 18%, transparent); color: color-mix(in srgb, #8b5cf6 70%, var(--text-primary, #e6edf7)); border: 1px solid color-mix(in srgb, #a78bfa 45%, transparent); }
+.badge-breaking { background: color-mix(in srgb, #ef4444 16%, transparent); color: color-mix(in srgb, #ef4444 75%, var(--text-primary, #e6edf7)); border: 1px solid color-mix(in srgb, #ef4444 45%, transparent); }
+.eyebrow { margin: 0 0 .4rem; font-size: .9rem; }
+.brief-tones { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.brief-tone { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border-light, #2c3d5c); text-decoration: none; color: inherit; font-size: .9rem; }
+.brief-tone.on { border-color: var(--accent, #3b82f6); font-weight: 700; }
+.brief .brief-p, .brief-frames .brief-p { max-width: 72ch; line-height: 1.6; }
+.brief-make { display: inline; }
+.brief-make button { font: inherit; padding: 5px 12px; border-radius: 8px; border: 1px solid var(--border-light, #2c3d5c); background: var(--bg-tertiary, #16223a); color: inherit; cursor: pointer; }
+.brief-make button:hover, .brief-make button:focus-visible { border-color: var(--accent, #3b82f6); }
+.brief-frames { margin-top: 1.6rem; }
+.brief-gaps { margin-top: 1rem; font-size: .9rem; }
+.live-dot { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: #ef4444; vertical-align: middle; animation: live-pulse 1.6s ease-in-out infinite; }
+@keyframes live-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+.wire-cluster.is-breaking { border-left: 3px solid #ef4444; padding-left: 10px; }

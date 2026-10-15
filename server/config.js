@@ -119,6 +119,13 @@ function load(env = process.env) {
             enabled: env.NEWS_WORKER !== 'off',
         },
 
+        // AI briefs (server/domain/briefs.js): the sweep summarizes busy clusters every intervalMs; off with
+        // NEWS_AI_BRIEFS=off (readers' requests for a tone or the perspectives then answer 503 too).
+        briefs: {
+            enabled: env.NEWS_AI_BRIEFS !== 'off',
+            intervalMs: Math.max(60_000, int(env.NEWS_AI_BRIEFS_INTERVAL_MS, 600_000)),
+        },
+
         // Browser origins that may call /api/v1 with a Bearer Network JWT (no cookies cross origins).
         apiCorsOrigins: list(env.API_CORS_ORIGINS || 'https://openvibe.network,https://openvibe.live,https://openvibe.community'),
     };

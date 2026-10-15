@@ -26,6 +26,26 @@ shown, fed or indexed.
 
 News publishes nothing until an editor does: the only seed is the topic list. Until then, and beside the stories after, **the wire** (`/wire`, and "From the wire" on the front page) shows what the sources report, grouped by cluster: each line is the outlet's own headline, outlet, date and link (the fields the licensing rules let News keep), never News' writing; duplicates and reports removed upstream leave it; `/wire` is `noindex, follow`.
 
+## AI briefs and Live
+
+The owner's April ask for News was multi-source summaries with tone and perspective controls and a live breaking-news
+view. Stories stay editor-written (below); beside them News now has:
+
+- **AI briefs** (`/briefs`, `/briefs/:cluster`; [server/domain/briefs.js](server/domain/briefs.js),
+  `migrations/0004_cluster_briefs.sql`): what a cluster's reports say, written by OpenVibe.AI and labelled as AI on
+  every page. Every paragraph cites the reports it rests on, numbered in the table below it; claims the model did not
+  cite are dropped and listed under "What the AI left out"; a run with no cited text makes no brief; the stub
+  provider's output is never shown. Only News' stored fields are sent (headline, outlet, date, URL and the short summary
+  the terms allow). The worker writes a neutral summary for every open cluster with two or more reports in the last 72
+  hours, six a tick every `NEWS_AI_BRIEFS_INTERVAL_MS` (10 minutes), and writes it again once the cluster changes.
+- **Tone** (`?tone=brief|neutral|explained`, `news.summarize_story`'s `tone`) and **how the outlets put it**
+  (`news.compare_perspectives`, two outlets or more): made when a reader asks, with a POST from this site (five every ten
+  minutes an address, 40 an hour in all), never by a link a crawler follows.
+- **Live** (`/live`): the newest reports as they arrive, grouped, refreshing itself every minute (`Refresh: 60`), with
+  **Breaking** on a subject three or more reports covered in the last two hours, and links to their AI briefs.
+- Briefs and Live are `noindex`: they are AI text and other publishers' headlines, not News' writing.
+  `NEWS_AI_BRIEFS=off` turns briefs off.
+
 ## Owns
 
 The nine charter tables live in News' own PostgreSQL database (`ov_news` on the host's data role, ADR-035; schema in [migrations/](migrations/)):

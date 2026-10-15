@@ -22,6 +22,8 @@ const NAV_LINKS = [
     { label: 'News', href: '/' },
     { label: 'Topics', href: '/topics' },
     { label: 'Wire', href: '/wire' },
+    { label: 'Live', href: '/live' },
+    { label: 'AI briefs', href: '/briefs' },
 ];
 
 const hashes = new Map();
@@ -99,6 +101,8 @@ function renderPage(o) {
         home: '/',
         css: asset('css/news.css'),
         styles: o.styles,   // openvibe-shared stylesheet names (the home page's showcase.css)
+        // This service's own extra stylesheets for one kind of page (the briefs and live pages' css/briefs.css).
+        head: (o.localStyles || []).map((rel) => `<link rel="stylesheet" href="${asset(rel)}">`).join('\n'),
         release: RELEASE,
         account,
         body: o.body,
