@@ -7,8 +7,8 @@
  *                  window (NEWS_CLUSTER_WINDOW_HOURS, default 72 h), matched on the cluster's core only: the
  *                  entities and terms about a third of its reports carry (coreMin), so a big cluster cannot
  *                  snowball on the union of everything it holds;
- *                    dates and times never count (TIME_WORD), nor words too common in the window to tell
- *                    one story from another (commonWords: an outlet's own boilerplate, or the window's);
+ *                    dates and times never count (TIME_WORD), nor words too common over the last month to
+ *                    tell one story from another (commonWords: an outlet's own boilerplate, or everyone's);
  *                    shared named entities count 2, shared terms count 1;
  *                    it joins when (≥ 1 shared entity AND ≥ 3 shared terms) OR ≥ 4 shared terms;
  *                    ties go to the oldest cluster. Otherwise it starts a new cluster.
@@ -48,19 +48,22 @@ function signature(item) {
 }
 
 /**
- * Words too common to tell one story from another, from the reports in the window (`pool`: { source_key, sig }):
- * those at least a tenth of the item's own outlet carries (its boilerplate: "NASA", the press corner's "Brussels",
- * GOV.UK's "statement"; once it has five reports there), or a tenth of all of them (once there are ten), and always at
- * least three reports. → Set
+ * Words too common to tell one story from another, from the reports of the 30 days around an item (`pool`:
+ * { source_key, sig }): those carried by 15% of the item's own outlet's reports (its boilerplate: "NASA", the press
+ * corner's "Brussels" and "Executive Vice-President", GOV.UK's "statement"; once it has ten), or by a tenth of everyone's
+ * (once there are twenty), and always by at least three. A month, not the cluster window: in three days one big story
+ * is a third of its outlet's reports (2026-10-15: the Critical Raw Materials projects, 4 of the press corner's 11),
+ * while boilerplate stays common all month. → Set
  */
+const COMMON_DAYS = 30;
 function commonWords(sourceKey, pool) {
     const out = new Set();
     const same = pool.filter((r) => r.source_key === sourceKey);
-    for (const [reports, least] of [[same, 5], [pool, 10]]) {
+    for (const [reports, least, share] of [[same, 10, 0.15], [pool, 20, 0.1]]) {
         if (reports.length < least) continue;
         const df = new Map();
         for (const r of reports) for (const w of new Set([...r.sig.terms, ...r.sig.entities])) df.set(w, (df.get(w) || 0) + 1);
-        const min = Math.max(3, reports.length / 10);
+        const min = Math.max(3, reports.length * share);
         for (const [w, n] of df) if (n >= min) out.add(w);
     }
     return out;
@@ -110,7 +113,7 @@ function createClusters({ store, config, outbox }) {
         insert: db.prepare(`INSERT INTO news_story_clusters (id, label, status, split_from, terms, entities, window_start, window_end, created_by, created_at, updated_at)
                             VALUES (@id, @label, 'open', @split_from, @terms, @entities, @window_start, @window_end, @created_by, @now, @now)`),
         members: db.prepare("SELECT * FROM news_source_items WHERE cluster_id = ? ORDER BY first_seen_at, seq"),
-        // The reports a window's common words are counted from (itemTime is checked in JS: published_at is text).
+        // The reports common words are counted from (itemTime is checked in JS: published_at is text).
         pool: db.prepare("SELECT id, source_key, headline, summary, published_at, first_seen_at, updated_at FROM news_source_items WHERE status NOT IN ('removed','duplicate') AND first_seen_at >= ? AND id <> ?"),
         sizes: db.prepare("SELECT cluster_id, count(*) AS n FROM news_source_items WHERE cluster_id = ANY(?) AND status <> 'removed' GROUP BY cluster_id"),
         setItem: db.prepare('UPDATE news_source_items SET cluster_id = ?, cluster_reason = ?, updated_at = ? WHERE id = ?'),
@@ -120,13 +123,13 @@ function createClusters({ store, config, outbox }) {
                                  VALUES (@id, @action, @cluster_id, @other_id, @item_ids, @reason, @actor, @reverses, @now)`),
     };
 
-    // Signatures of the window's reports, kept between calls (an item's words change only when it is updated).
+    // Signatures of the month's reports, kept between calls (an item's words change only when it is updated).
     const sigCache = new Map();
     async function windowCommon(item, at) {
-        const w = config.clustering.windowMs;
+        const span = COMMON_DAYS * 86400000;
         const pool = [];
-        for (const r of await q.pool.all(at - 2 * w, item.id)) {
-            if (Math.abs(itemTime(r) - at) > w) continue;
+        for (const r of await q.pool.all(at - 2 * span, item.id)) {
+            if (Math.abs(itemTime(r) - at) > span) continue;
             const key = `${r.id}:${r.updated_at}`;
             let sig = sigCache.get(key);
             if (!sig) { sig = signature(r); if (sigCache.size > 5000) sigCache.clear(); sigCache.set(key, sig); }

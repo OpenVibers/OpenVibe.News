@@ -132,11 +132,17 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         const sig = signature({ headline: 'Statement on Tuesday 13 October 2026 at 10:00 EDT', summary: 'Published in October.' });
         assert.ok(!sig.terms.some((w) => /^(tuesday|13|october|2026|edt)$/.test(w)), sig.terms.join(','));
         const report = (source, headline) => ({ source_key: source, sig: signature({ headline }) });
-        const pool = ['Haiti sanctions', 'Libya talks', 'Yemen escalation', 'Syria sovereignty', 'Colombia peace'].map((x) => report('govuk', `UK statement at the UN Security Council on ${x}`));
+        const topics = ['Haiti sanctions', 'Libya talks', 'Yemen escalation', 'Syria sovereignty', 'Colombia peace', 'Sudan famine', 'Ukraine energy', 'Iran nuclear', 'Gaza aid', 'Myanmar elections'];
+        const pool = topics.map((x) => report('govuk', `UK statement at the UN Security Council on ${x}`));
         const common = commonWords('govuk', pool);
         assert.ok(common.has('statement') && common.has('council'), [...common].join(','));
         assert.ok(!common.has('haiti'), 'a story\'s own words stay');
-        assert.strictEqual(commonWords('govuk', pool.slice(0, 4)).size, 0, 'four reports are too few to call anything boilerplate');
+        assert.strictEqual(commonWords('govuk', pool.slice(0, 9)).size, 0, 'nine reports are too few to call anything boilerplate');
+        // A big story is not boilerplate: four reports on it among the outlet's month of thirty stay countable.
+        const month = pool.concat(Array.from({ length: 16 }, (_, i) => report('govuk', `Funding round ${i} for regional ${['bridges', 'schools', 'parks', 'clinics'][i % 4]}`)),
+            [1, 2, 3, 4].map(() => report('govuk', 'Critical raw materials strategic projects selected')),
+            Array.from({ length: 30 }, (_, i) => report('nasa', `Mission ${i} sends probe toward ${['Mars', 'Venus', 'Titan', 'Europa', 'Ceres'][i % 5]}`)));
+        assert.ok(!commonWords('govuk', month).has('raw'), 'four of thirty is a story');
         const cluster = { terms: {}, entities: {} };
         for (const w of pool[0].sig.terms) cluster.terms[w] = 1;
         for (const w of pool[0].sig.entities) cluster.entities[w] = 1;
