@@ -55,6 +55,13 @@ Other tables in the same database:
   keeps the pre-chassis key it was carried from), `news_source_status` (display cache of Sources'
   registry names and health), `event_outbox` and `idempotency_receipts` (openvibe-sdk),
   `subject_projections` (Network names). None of them is authority for anything outside News.
+- `telemetry_samples` (migration `0003_telemetry.sql`): News' own request telemetry, openvibe-sdk
+  0.46's `platform.telemetry-sample@1` shape. Each HTTP request is aggregated by route template,
+  method and status class, never by raw URL; `/shared` files, static assets, health, readiness and
+  `/metrics` are not counted. Once a minute one `http.request` sample per key, plus the
+  active-requests, p95 latency and event-loop-lag gauges, is written here (`server/app.js` builds
+  the collector, `server/index.js` flushes it and runs the 14-day retention); rows older than
+  14 days are deleted daily.
 
 ## Does not own
 
