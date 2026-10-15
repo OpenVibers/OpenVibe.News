@@ -4,7 +4,9 @@
  * Clusters: deterministic, explainable grouping of source items that report the same story.
  *
  *   assign(item)   an active item joins the open cluster it shares the most with inside the time
- *                  window (NEWS_CLUSTER_WINDOW_HOURS, default 72 h):
+ *                  window (NEWS_CLUSTER_WINDOW_HOURS, default 72 h), matched on the cluster's core only: the
+ *                  entities and terms about a third of its reports carry (coreMin), so a big cluster cannot
+ *                  snowball on the union of everything it holds;
  *                    shared named entities count 2, shared terms count 1;
  *                    it joins when (≥ 1 shared entity AND ≥ 2 shared terms) OR ≥ 3 shared terms;
  *                    ties go to the oldest cluster. Otherwise it starts a new cluster.
@@ -12,6 +14,8 @@
  *                  shared terms and score, so every membership can be explained and recomputed.
  *                  A duplicate joins its original's cluster (rule "duplicate_of").
  *   merge(a, b)    an editor merges b into a; split(a, items) moves items into a new cluster.
+ *   resplit(a)     regroups a cluster's reports with today's rule; every group but the first report's is split
+ *                  off (audited and reversible, like an editor's split).
  *                  Both are audited (news_cluster_audit, with exactly which items moved) and
  *                  reversible (reverse(auditId)); nothing is deleted.
  *
@@ -37,15 +41,23 @@ function itemTime(item) {
     return Number.isFinite(p) ? p : item.first_seen_at;
 }
 
-/** Match an item's signature against a cluster's. → { sharedEntities, sharedTerms, score, joins } */
-function compare(sig, cluster) {
-    const ce = parse(cluster.entities, {});
-    const ct = parse(cluster.terms, {});
-    const sharedEntities = sig.entities.filter((e) => ce[e]);
-    const sharedTerms = sig.terms.filter((t) => ct[t]);
+/**
+ * How many of a cluster's n reports must carry an entity or term for it to be the story's own: about a third (one
+ * report of one or two, two of three to five, 66 of 196). Matching on the union instead let one cluster take 196
+ * unrelated reports from three outlets (2026-10-15: 1,950 terms, so nearly any report shared three).
+ */
+const coreMin = (n) => Math.ceil((Math.max(1, n) + 1) / 3);
+
+/** Match an item's signature against a cluster's core (n = its reports). → { sharedEntities, sharedTerms, score, joins, coreMin } */
+function compare(sig, cluster, n = 1) {
+    const ce = typeof cluster.entities === 'string' ? parse(cluster.entities, {}) : cluster.entities || {};
+    const ct = typeof cluster.terms === 'string' ? parse(cluster.terms, {}) : cluster.terms || {};
+    const min = coreMin(n);
+    const sharedEntities = sig.entities.filter((e) => (ce[e] || 0) >= min);
+    const sharedTerms = sig.terms.filter((t) => (ct[t] || 0) >= min);
     const score = 2 * sharedEntities.length + sharedTerms.length;
     const joins = (sharedEntities.length >= 1 && sharedTerms.length >= 2) || sharedTerms.length >= 3;
-    return { sharedEntities, sharedTerms, score, joins };
+    return { sharedEntities, sharedTerms, score, joins, coreMin: min };
 }
 
 function labelOf(entities, terms) {
@@ -63,6 +75,7 @@ function createClusters({ store, config, outbox }) {
         insert: db.prepare(`INSERT INTO news_story_clusters (id, label, status, split_from, terms, entities, window_start, window_end, created_by, created_at, updated_at)
                             VALUES (@id, @label, 'open', @split_from, @terms, @entities, @window_start, @window_end, @created_by, @now, @now)`),
         members: db.prepare("SELECT * FROM news_source_items WHERE cluster_id = ? ORDER BY first_seen_at, seq"),
+        sizes: db.prepare("SELECT cluster_id, count(*) AS n FROM news_source_items WHERE cluster_id = ANY(?) AND status <> 'removed' GROUP BY cluster_id"),
         setItem: db.prepare('UPDATE news_source_items SET cluster_id = ?, cluster_reason = ?, updated_at = ? WHERE id = ?'),
         audit: db.prepare('SELECT * FROM news_cluster_audit WHERE id = ?'),
         auditFor: db.prepare('SELECT * FROM news_cluster_audit WHERE cluster_id = ? OR other_id = ? ORDER BY created_at, seq'),
@@ -117,13 +130,15 @@ function createClusters({ store, config, outbox }) {
         const at = itemTime(item);
         const w = config.clustering.windowMs;
         let best = null;
-        for (const c of await q.open.all(at - w, at + w)) {
-            const m = compare(sig, c);
+        const open = await q.open.all(at - w, at + w);
+        const sizes = new Map(open.length ? (await q.sizes.all(open.map((c) => c.id))).map((r) => [r.cluster_id, Number(r.n)]) : []);
+        for (const c of open) {
+            const m = compare(sig, c, sizes.get(c.id) || 1);
             if (!m.joins) continue;
-            if (!best || m.score > best.m.score) best = { c, m };   // ORDER BY created_at, seq: the oldest wins a tie
+            if (!best || m.score > best.m.score) best = { c, m, n: sizes.get(c.id) || 1 };   // ORDER BY created_at, seq: the oldest wins a tie
         }
         if (best) {
-            const reason = { rule: 'shared_terms', cluster: best.c.id, shared_entities: best.m.sharedEntities, shared_terms: best.m.sharedTerms, score: best.m.score, window_hours: w / 3600000 };
+            const reason = { rule: 'shared_terms', cluster: best.c.id, shared_entities: best.m.sharedEntities, shared_terms: best.m.sharedTerms, score: best.m.score, core_min: best.m.coreMin, cluster_size: best.n, window_hours: w / 3600000 };
             await q.setItem.run(best.c.id, JSON.stringify(reason), store.now(), item.id);
             const cluster = await recompute(best.c.id);
             await emit(cluster, 'item_added', { item_id: item.id, rule: 'shared_terms', score: best.m.score });
@@ -167,7 +182,7 @@ function createClusters({ store, config, outbox }) {
     }
 
     const api = {
-        signature, compare, itemTime, labelOf, assign, resolve, recompute,
+        signature, compare, coreMin, itemTime, labelOf, assign, resolve, recompute,
 
         get: async (id) => await q.get.get(String(id || '')) || null,
         members: async (id) => await q.members.all(id),
@@ -237,6 +252,51 @@ function createClusters({ store, config, outbox }) {
         },
 
         /**
+         * Regroup one open cluster's reports with today's rule (coreMin), in the order they were published: each
+         * report joins the group whose core it shares the most with inside the window, a duplicate follows its
+         * original. The group holding the first report stays; every other group is split off as an editor's split
+         * would be (audited, reversible one by one). Removed reports stay where they are. dryRun answers the grouping
+         * and changes nothing. → { cluster, groups, splits, grouping: [[item id, …], …] }
+         */
+        async resplit(viewer, clusterId, { reason = null, dryRun = false } = {}) {
+            const from = await mustOpen(clusterId);
+            const w = config.clustering.windowMs;
+            const members = (await q.members.all(from.id)).filter((i) => i.status !== 'removed')
+                .sort((a, b) => (itemTime(a) - itemTime(b)) || (a.first_seen_at - b.first_seen_at) || (a.seq - b.seq));
+            const groups = [];
+            const add = (g, it) => {
+                const sig = signature(it);
+                for (const t of sig.terms) g.terms[t] = (g.terms[t] || 0) + 1;
+                for (const e of sig.entities) g.entities[e] = (g.entities[e] || 0) + 1;
+                const at = itemTime(it);
+                g.start = Math.min(g.start, at); g.end = Math.max(g.end, at);
+                g.ids.push(it.id);
+            };
+            for (const it of members) {
+                let into = it.status === 'duplicate' && it.duplicate_of ? groups.find((g) => g.ids.includes(it.duplicate_of)) : null;
+                if (!into) {
+                    const sig = signature(it);
+                    const at = itemTime(it);
+                    let best = null;
+                    for (const g of groups) {
+                        if (g.end < at - w || g.start > at + w) continue;
+                        const m = compare(sig, g, g.ids.length);
+                        if (m.joins && (!best || m.score > best.m.score)) best = { g, m };
+                    }
+                    into = best ? best.g : null;
+                }
+                if (!into) { into = { terms: {}, entities: {}, start: Infinity, end: -Infinity, ids: [] }; groups.push(into); }
+                add(into, it);
+            }
+            const grouping = groups.map((g) => g.ids);
+            if (dryRun) return { cluster: from, groups: groups.length, splits: [], grouping };
+            const splits = [];
+            const why = reason ? String(reason).slice(0, 500) : 'regrouped on the cluster\'s core terms';
+            for (const g of groups.slice(1)) splits.push((await api.split(viewer, from.id, g.ids, { reason: why })).audit);
+            return { cluster: await q.get.get(from.id), groups: groups.length, splits, grouping };
+        },
+
+        /**
          * Undo a merge or a split: the items that moved (and are still where they were moved to) go
          * back; the absorbed cluster reopens / the split-off cluster is dissolved. Audited as well.
          */
@@ -287,4 +347,4 @@ function createClusters({ store, config, outbox }) {
     return api;
 }
 
-module.exports = { createClusters, signature, compare, itemTime, labelOf };
+module.exports = { createClusters, signature, compare, coreMin, itemTime, labelOf };
