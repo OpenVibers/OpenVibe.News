@@ -7,6 +7,7 @@
  */
 const { createApp } = require('./app');
 const { gracefulStop } = require('openvibe-sdk/service');
+const { startTelemetryRetention } = require('openvibe-sdk/telemetry');
 
 /**
  * The process stop (openvibe-sdk/service, docs/service.md's 5 s family): the Sources pull worker stops
@@ -18,7 +19,7 @@ function createLifecycle({ server, ctx, exit, signals }) {
     return gracefulStop({
         name: 'News', server, deadlineExitCode: 0, exit, signals,
         stop: [() => ctx.worker.stop()],
-        close: [() => ctx.outbox.stop(), () => ctx.store.close()],
+        close: [() => ctx.outbox.stop(), async () => { clearInterval(ctx.telemetryTick); if (ctx.retention) await ctx.retention.stop(); if (ctx.telemetry) await ctx.telemetry.stop(); }, () => ctx.store.close()],
     });
 }
 
@@ -33,6 +34,12 @@ async function start() {
     server.keepAliveTimeout = 65_000;
     ctx.outbox.start();
     ctx.worker.start();
+    // telemetry_samples rows older than 30 days go: a minute after start, then daily (openvibe-sdk/telemetry).
+    ctx.retention = startTelemetryRetention({ db: ctx.store.db, log: console });
+    // The request collector aggregates in memory and has no timer of its own (openvibe-sdk 0.46 createHttpTelemetry):
+    // this tick writes each 15-second interval's samples; the stop clears it and flushes once more.
+    ctx.telemetryTick = setInterval(() => { ctx.telemetry.flush().catch(() => {}); }, 15_000);
+    ctx.telemetryTick.unref();
 
     createLifecycle({ server, ctx });
     return { server, ctx };
