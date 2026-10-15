@@ -7,8 +7,10 @@
  *                  window (NEWS_CLUSTER_WINDOW_HOURS, default 72 h), matched on the cluster's core only: the
  *                  entities and terms about a third of its reports carry (coreMin), so a big cluster cannot
  *                  snowball on the union of everything it holds;
+ *                    dates and times never count (TIME_WORD), nor words too common in the window to tell
+ *                    one story from another (commonWords: an outlet's own boilerplate, or the window's);
  *                    shared named entities count 2, shared terms count 1;
- *                    it joins when (≥ 1 shared entity AND ≥ 2 shared terms) OR ≥ 3 shared terms;
+ *                    it joins when (≥ 1 shared entity AND ≥ 3 shared terms) OR ≥ 4 shared terms;
  *                    ties go to the oldest cluster. Otherwise it starts a new cluster.
  *                  The decision is stored on the item (cluster_reason) with the shared entities,
  *                  shared terms and score, so every membership can be explained and recomputed.
@@ -29,10 +31,39 @@ const newClusterId = (now) => `clu_${ids.ulid(now)}`;
 const newAuditId = (now) => `cla_${ids.ulid(now)}`;
 const parse = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
 
-/** Terms and entities of one item (headline + the licensed summary we store). */
+/**
+ * Dates and times say when, not what: "October", "Tuesday", "2026", "13", "EDT" joined unrelated reports published the
+ * same week (2026-10-15). A term or entity made only of such words never counts.
+ */
+const TIME_WORD = /^(?:\d{1,4}(?:st|nd|rd|th)?|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|yesterday|tomorrow|week|weekend|year|month|day|edt|est|cdt|cst|pdt|pst|utc|gmt|bst|cet|cest|am|pm)$/;
+const timeOnly = (w) => String(w).split(' ').every((x) => TIME_WORD.test(x));
+
+/** Terms and entities of one item (headline + the licensed summary we store), without dates and times. */
 function signature(item) {
     const t = `${item.headline || ''}. ${item.summary || ''}`;
-    return { terms: normalize.terms(t), entities: normalize.entities(item.headline || '').concat(normalize.entities(item.summary || '')).filter((v, i, a) => a.indexOf(v) === i).sort() };
+    return {
+        terms: normalize.terms(t).filter((w) => !timeOnly(w)),
+        entities: normalize.entities(item.headline || '').concat(normalize.entities(item.summary || '')).filter((v, i, a) => a.indexOf(v) === i && !timeOnly(v)).sort(),
+    };
+}
+
+/**
+ * Words too common to tell one story from another, from the reports in the window (`pool`: { source_key, sig }):
+ * those at least a tenth of the item's own outlet carries (its boilerplate: "NASA", the press corner's "Brussels",
+ * GOV.UK's "statement"; once it has five reports there), or a tenth of all of them (once there are ten), and always at
+ * least three reports. → Set
+ */
+function commonWords(sourceKey, pool) {
+    const out = new Set();
+    const same = pool.filter((r) => r.source_key === sourceKey);
+    for (const [reports, least] of [[same, 5], [pool, 10]]) {
+        if (reports.length < least) continue;
+        const df = new Map();
+        for (const r of reports) for (const w of new Set([...r.sig.terms, ...r.sig.entities])) df.set(w, (df.get(w) || 0) + 1);
+        const min = Math.max(3, reports.length / 10);
+        for (const [w, n] of df) if (n >= min) out.add(w);
+    }
+    return out;
 }
 
 /** The time an item is placed at: when the source says it was published, else when News first saw it. */
@@ -48,15 +79,19 @@ function itemTime(item) {
  */
 const coreMin = (n) => Math.ceil((Math.max(1, n) + 1) / 3);
 
-/** Match an item's signature against a cluster's core (n = its reports). → { sharedEntities, sharedTerms, score, joins, coreMin } */
-function compare(sig, cluster, n = 1) {
+/**
+ * Match an item's signature against a cluster's core (n = its reports), leaving out the `common` words.
+ * → { sharedEntities, sharedTerms, score, joins, coreMin }
+ */
+function compare(sig, cluster, n = 1, common = null) {
     const ce = typeof cluster.entities === 'string' ? parse(cluster.entities, {}) : cluster.entities || {};
     const ct = typeof cluster.terms === 'string' ? parse(cluster.terms, {}) : cluster.terms || {};
     const min = coreMin(n);
-    const sharedEntities = sig.entities.filter((e) => (ce[e] || 0) >= min);
-    const sharedTerms = sig.terms.filter((t) => (ct[t] || 0) >= min);
+    const counts = (w) => !(common && common.has(w));
+    const sharedEntities = sig.entities.filter((e) => (ce[e] || 0) >= min && counts(e));
+    const sharedTerms = sig.terms.filter((t) => (ct[t] || 0) >= min && counts(t));
     const score = 2 * sharedEntities.length + sharedTerms.length;
-    const joins = (sharedEntities.length >= 1 && sharedTerms.length >= 2) || sharedTerms.length >= 3;
+    const joins = (sharedEntities.length >= 1 && sharedTerms.length >= 3) || sharedTerms.length >= 4;
     return { sharedEntities, sharedTerms, score, joins, coreMin: min };
 }
 
@@ -75,6 +110,8 @@ function createClusters({ store, config, outbox }) {
         insert: db.prepare(`INSERT INTO news_story_clusters (id, label, status, split_from, terms, entities, window_start, window_end, created_by, created_at, updated_at)
                             VALUES (@id, @label, 'open', @split_from, @terms, @entities, @window_start, @window_end, @created_by, @now, @now)`),
         members: db.prepare("SELECT * FROM news_source_items WHERE cluster_id = ? ORDER BY first_seen_at, seq"),
+        // The reports a window's common words are counted from (itemTime is checked in JS: published_at is text).
+        pool: db.prepare("SELECT id, source_key, headline, summary, published_at, first_seen_at, updated_at FROM news_source_items WHERE status NOT IN ('removed','duplicate') AND first_seen_at >= ? AND id <> ?"),
         sizes: db.prepare("SELECT cluster_id, count(*) AS n FROM news_source_items WHERE cluster_id = ANY(?) AND status <> 'removed' GROUP BY cluster_id"),
         setItem: db.prepare('UPDATE news_source_items SET cluster_id = ?, cluster_reason = ?, updated_at = ? WHERE id = ?'),
         audit: db.prepare('SELECT * FROM news_cluster_audit WHERE id = ?'),
@@ -82,6 +119,21 @@ function createClusters({ store, config, outbox }) {
         insertAudit: db.prepare(`INSERT INTO news_cluster_audit (id, action, cluster_id, other_id, item_ids, reason, actor, reverses, created_at)
                                  VALUES (@id, @action, @cluster_id, @other_id, @item_ids, @reason, @actor, @reverses, @now)`),
     };
+
+    // Signatures of the window's reports, kept between calls (an item's words change only when it is updated).
+    const sigCache = new Map();
+    async function windowCommon(item, at) {
+        const w = config.clustering.windowMs;
+        const pool = [];
+        for (const r of await q.pool.all(at - 2 * w, item.id)) {
+            if (Math.abs(itemTime(r) - at) > w) continue;
+            const key = `${r.id}:${r.updated_at}`;
+            let sig = sigCache.get(key);
+            if (!sig) { sig = signature(r); if (sigCache.size > 5000) sigCache.clear(); sigCache.set(key, sig); }
+            pool.push({ source_key: r.source_key, sig });
+        }
+        return commonWords(item.source_key, pool);
+    }
 
     async function emit(cluster, action, extra = {}) {
         await outbox.emit({
@@ -132,13 +184,14 @@ function createClusters({ store, config, outbox }) {
         let best = null;
         const open = await q.open.all(at - w, at + w);
         const sizes = new Map(open.length ? (await q.sizes.all(open.map((c) => c.id))).map((r) => [r.cluster_id, Number(r.n)]) : []);
+        const common = open.length ? await windowCommon(item, at) : new Set();
         for (const c of open) {
-            const m = compare(sig, c, sizes.get(c.id) || 1);
+            const m = compare(sig, c, sizes.get(c.id) || 1, common);
             if (!m.joins) continue;
             if (!best || m.score > best.m.score) best = { c, m, n: sizes.get(c.id) || 1 };   // ORDER BY created_at, seq: the oldest wins a tie
         }
         if (best) {
-            const reason = { rule: 'shared_terms', cluster: best.c.id, shared_entities: best.m.sharedEntities, shared_terms: best.m.sharedTerms, score: best.m.score, core_min: best.m.coreMin, cluster_size: best.n, window_hours: w / 3600000 };
+            const reason = { rule: 'shared_terms', cluster: best.c.id, shared_entities: best.m.sharedEntities, shared_terms: best.m.sharedTerms, score: best.m.score, core_min: best.m.coreMin, cluster_size: best.n, ignored: sig.terms.concat(sig.entities).filter((x) => common.has(x)).slice(0, 12), window_hours: w / 3600000 };
             await q.setItem.run(best.c.id, JSON.stringify(reason), store.now(), item.id);
             const cluster = await recompute(best.c.id);
             await emit(cluster, 'item_added', { item_id: item.id, rule: 'shared_terms', score: best.m.score });
@@ -182,7 +235,7 @@ function createClusters({ store, config, outbox }) {
     }
 
     const api = {
-        signature, compare, coreMin, itemTime, labelOf, assign, resolve, recompute,
+        signature, compare, coreMin, commonWords, itemTime, labelOf, assign, resolve, recompute,
 
         get: async (id) => await q.get.get(String(id || '')) || null,
         members: async (id) => await q.members.all(id),
@@ -277,10 +330,11 @@ function createClusters({ store, config, outbox }) {
                 if (!into) {
                     const sig = signature(it);
                     const at = itemTime(it);
+                    const common = groups.length ? await windowCommon(it, at) : null;
                     let best = null;
                     for (const g of groups) {
                         if (g.end < at - w || g.start > at + w) continue;
-                        const m = compare(sig, g, g.ids.length);
+                        const m = compare(sig, g, g.ids.length, common);
                         if (m.joins && (!best || m.score > best.m.score)) best = { g, m };
                     }
                     into = best ? best.g : null;
@@ -347,4 +401,4 @@ function createClusters({ store, config, outbox }) {
     return api;
 }
 
-module.exports = { createClusters, signature, compare, coreMin, itemTime, labelOf };
+module.exports = { createClusters, signature, compare, coreMin, commonWords, itemTime, labelOf };
