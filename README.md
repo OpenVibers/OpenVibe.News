@@ -238,7 +238,7 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
   chassis: the Sources client, the change-cursor pull, the signed events consumer and the
   gate → document → outbox glue), `openvibe-contracts` v0.97.0,
   `openvibe-shared` v2.6.0 (Frame, app icon, footer, legal, release, metrics, ready, seo),
-  `openvibe-sdk` v0.44.0 (db with after-commit hooks, PostgreSQL events outbox and inbox, webhook signatures v2,
+  `openvibe-sdk` v0.46.0 (db with after-commit hooks, PostgreSQL events outbox and inbox, webhook signatures v2,
   service tokens, Network sign-in (`openvibe-sdk/sso`) and the service outbox (`openvibe-sdk/events`), per-actor limits, testing).
 - **OpenVibe.Sources** (4720): `sources.item.read`; optionally `sources.source.read` (outlet
   names and source health; without it the outlet is the URL's host).
@@ -421,7 +421,7 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 
 <!-- versions:start -->
 - openvibe-contracts: v0.186.0
-- openvibe-sdk: v0.44.0
+- openvibe-sdk: v0.46.0
 - openvibe-shared: v4.2.1
 - openvibe-publishing: v1.3.0
 <!-- versions:end -->
