@@ -26,6 +26,7 @@ const { openStore } = require('./db');
 const { createViewerResolver } = require('./auth/viewer');
 const { createPeople } = require('./clients/network');
 const { createAi } = require('./clients/ai');
+const { createBriefs } = require('./domain/briefs');
 const { createCommunity } = require('./clients/community');
 const { createPublication } = require('./domain/publication');
 const { createDiscussion } = require('./domain/discussion');
@@ -97,9 +98,10 @@ async function createApp(opts = {}) {
         secureCookies: config.cookies.secure,
     });
     const viewers = createViewerResolver({ auth, config, people });
-    const worker = createWorker({ config, ingest, outbox, log });
+    const briefs = createBriefs({ store, ai: config.briefs.enabled ? ai : null, log });
+    const worker = createWorker({ config, ingest, outbox, briefs, log });
 
-    const ctx = { config, store, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow };
+    const ctx = { config, store, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow, briefs };
 
     const app = express();
     app.disable('x-powered-by');
