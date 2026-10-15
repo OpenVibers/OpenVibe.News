@@ -15,7 +15,7 @@ const BUDGETS = {
     htmlRawKB: 27,   // measured 24.4 with the home showcase (17.4 before it; fresh database): raised as a decision, as Blog did
     htmlBrotliKB: 7.5,   // 6.3 (4.5 before the showcase)
     jsFiles: 5,   // 5 (theme-loader, web-runtime, navbar, footer, boost: openvibe-shared/shell adds web-runtime, 2026-10-04)
-    jsRawKB: 245,   // 239.1 (212.2 before openvibe-shared/shell's web-runtime.js)
+    jsRawKB: 250,   // 246.2 with openvibe-shared 4.2.x (Ask Actor in the navbar, 2026-10-15); 239.1 (212.2 before openvibe-shared/shell's web-runtime.js)
     jsBrotliKB: 59,   // 56.3 (49.9 before web-runtime.js)
     cssFiles: 2,   // 2 (news.css + showcase.css, home page 1 only)
     cssRawKB: 18.5,   // 15.5 (5.2 before showcase.css); 18.2 with the front page aligned to the showcase (2026-10-15)
