@@ -44,6 +44,24 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
             assert.ok(!r.text.includes(B));
             assert.ok(r.text.includes(A));
         });
+
+        await check('a topic page carries the wire on its topic; a quiet topic says so and shows the latest wire', async () => {
+            const { topicsFor } = require('../server/domain/topic-match');
+            assert.deepStrictEqual(topicsFor({ label: 'europa clipper · nasa', headlines: [] }), ['space']);
+            assert.deepStrictEqual(topicsFor({ label: 'recall', headlines: [], sources: ['fda-food-recalls'] }), ['health']);
+            assert.deepStrictEqual(topicsFor({ label: 'bakery · prize', headlines: ['Local bakery wins regional sourdough prize'] }), [], 'one stray word places nothing');
+            assert.deepStrictEqual(topicsFor({ label: 'minister', headlines: ['New tariffs on steel', 'Trade talks resume as inflation eases'] }), ['business'], 'two different words across the headlines');
+            const space = await t.get('/topics/space');
+            assert.strictEqual(space.status, 200);
+            assert.ok(space.text.includes('From the wire on Space'));
+            assert.ok(space.text.includes('Europa Clipper'));
+            assert.ok(!space.text.includes('sourdough'), 'only the topic\'s clusters');
+            assert.ok(!/have been published yet/.test(space.text));
+            const games = await t.get('/topics/games');
+            assert.strictEqual(games.status, 200);
+            assert.ok(games.text.includes('have not reported on Games in the last 30 days. The latest from the wire:'));
+            assert.ok(games.text.includes('Europa Clipper') && games.text.includes('href="/wire"'));
+        });
     } finally {
         await t.close();
     }

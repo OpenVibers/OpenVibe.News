@@ -101,10 +101,17 @@ function topicsIndex({ topics }) {
 <ul class="topic-list wide">${topics.map((t) => h`<li><a href="/topics/${t.slug}">${t.name}</a>${t.description ? h` <span class="meta">— ${t.description}</span>` : ''}</li>`)}</ul>`);
 }
 
-function topicPage({ topic, items, pager, feeds, breadcrumbs }) {
+function topicPage({ topic, items, pager, feeds, breadcrumbs, topicBriefs = [], topicWire = [], latestWire = [] }) {
+    const first = !pager || pager.page === 1;
+    const quiet = first && !items.length && !topicBriefs.length && !topicWire.length;
     return String(h`${raw(ssr.breadcrumbsHtml(breadcrumbs))}
 <header class="site-header"><h1>${topic.name}</h1>${topic.description ? h`<p class="lede">${topic.description}</p>` : ''}${raw(feedLinksHtml(feeds))}</header>
-<section aria-label="Stories">${storyList(items, `No stories on ${topic.name} have been published yet.`)}</section>
+${items.length ? h`<section aria-label="Stories">${storyList(items, '')}</section>` : ''}
+${raw(briefsSection(topicBriefs))}
+${topicWire.length ? h`<section class="wire" aria-labelledby="topic-wire-h"><h2 id="topic-wire-h">From the wire on ${topic.name}</h2>
+<p class="meta">${WIRE_NOTE}</p><ol class="wire-list">${topicWire.map((c) => wireCluster(c, { brief: true }))}</ol></section>` : ''}
+${quiet ? h`<p class="meta">The sources OpenVibe.News follows have not reported on ${topic.name} in the last 30 days. The latest from the wire:</p>
+${latestWire.length ? h`<ol class="wire-list">${latestWire.map((c) => wireCluster(c, { brief: true }))}</ol>` : ''}<p><a href="/wire">The whole wire</a> · <a href="/topics">Every topic</a></p>` : ''}
 ${raw(ssr.paginationHtml(pager))}`);
 }
 

@@ -26,6 +26,7 @@
 const { ids } = require('openvibe-contracts');
 const { normalize } = require('openvibe-publishing/ingest');
 const { ApiError } = require('../http/errors');
+const { topicsFor } = require('./topic-match');
 
 const newClusterId = (now) => `clu_${ids.ulid(now)}`;
 const newAuditId = (now) => `cla_${ids.ulid(now)}`;
@@ -258,6 +259,34 @@ function createClusters({ store, config, outbox }) {
                 if (!items.length) continue;
                 items.sort((a, b) => String(b.published_at || '').localeCompare(String(a.published_at || '')));
                 out.push({ id: c.id, label: c.label, updated: c.window_end, items });
+                if (out.length >= limit) break;
+            }
+            return out;
+        },
+
+        /**
+         * The wire for one topic (server/domain/topic-match.js): open clusters with activity in the last `days`, newest
+         * first, that the topic's sources or words place in it; shaped like wire(). One query, then matched in memory.
+         */
+        async topicWire(slug, { limit = 20, days = 30 } = {}) {
+            const since = store.now() - days * 86400000;
+            const rows = await db.prepare(`SELECT c.id AS cid, c.label, c.window_end, i.id, i.headline, i.canonical_url, i.outlet, i.published_at, i.source_key
+                FROM news_story_clusters c JOIN news_source_items i ON i.cluster_id = c.id
+                WHERE c.status = 'open' AND c.window_end >= ? AND i.status = 'active' AND i.removed_at IS NULL
+                ORDER BY c.window_end DESC, c.id DESC`).all(since);
+            const byCluster = new Map();
+            for (const r of rows) {
+                if (!byCluster.has(r.cid)) byCluster.set(r.cid, { id: r.cid, label: r.label, updated: r.window_end, items: [], sources: new Set() });
+                const c = byCluster.get(r.cid);
+                c.sources.add(r.source_key);
+                if (r.canonical_url) c.items.push({ id: r.id, headline: r.headline, url: r.canonical_url, outlet: r.outlet, published_at: r.published_at });
+            }
+            const out = [];
+            for (const c of byCluster.values()) {
+                if (!c.items.length) continue;
+                if (!topicsFor({ label: c.label, headlines: c.items.map((i) => i.headline), sources: [...c.sources] }).includes(slug)) continue;
+                c.items.sort((a, b) => String(b.published_at || '').localeCompare(String(a.published_at || '')));
+                out.push({ id: c.id, label: c.label, updated: c.updated, items: c.items });
                 if (out.length >= limit) break;
             }
             return out;
