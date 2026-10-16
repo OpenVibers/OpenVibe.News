@@ -29,9 +29,9 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
             assert.match(r.headers.get('cache-control') || '', /public/);
         });
 
-        await check('the front page keeps "no stories yet", and shows the latest clusters from the wire', async () => {
+        await check('the front page shows the latest clusters from the wire, and no "no stories yet" apology', async () => {
             const r = await t.get('/');
-            assert.ok(r.text.includes('No stories have been published yet'));
+            assert.ok(!r.text.includes('No stories have been published yet'));
             assert.ok(r.text.includes('From the wire') && r.text.includes('href="/wire"'));
             assert.ok(r.text.includes('Europa Clipper'));
             assert.ok(!/noindex/.test(r.headers.get('x-robots-tag') || ''), 'with the wire, the front page is not empty: it is indexed');

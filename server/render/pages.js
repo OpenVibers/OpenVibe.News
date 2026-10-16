@@ -45,18 +45,21 @@ ${raw(feedLinksHtml(feeds))}
 <p class="lede">Source-backed stories. Every paragraph cites the reports it rests on; corrections and retractions stay on the record.</p>
 ${raw(feedLinksHtml(feeds))}
 </header>`}
-<section id="stories" aria-label="Stories">${storyList(items, wire || briefs.length ? `No stories have been published yet: editors write them from the sources, and every paragraph cites them. Until then, ${briefs.length ? 'the AI briefs and the wire below show' : 'the wire below shows'} what the sources report.` : 'No stories have been published yet. OpenVibe.News publishes only what an editor has written from its sources.')}</section>
-${raw(ssr.paginationHtml(pager))}
-${raw(briefsSection(briefs))}
+${items.length || !showcase ? h`<section id="stories" aria-label="Stories">${storyList(items, 'No stories on this page.')}</section>
+${raw(ssr.paginationHtml(pager))}` : ''}
+${raw(briefsSection(briefs, { lead: showcase && !items.length }))}
+${showcase && !items.length && !briefs.length && !wire ? h`<p class="empty">The first reports are on their way: the AI briefs and the wire fill in as the sources report.</p>` : ''}
 ${raw(wire)}
 ${topics.length ? h`<section class="side" aria-label="Topics"><h2>Topics</h2><ul class="topic-list">${topics.map((t) => h`<li><a href="/topics/${t.slug}">${t.name}</a></li>`)}</ul></section>` : ''}`);
 }
 
 /** The front page's latest AI briefs (server/domain/briefs.js), labelled as AI, each opening on its first paragraph. */
-function briefsSection(briefs) {
+// With no editor's story yet (`lead`), the briefs are the front page's latest stories, under its "Latest stories"
+// heading: still labelled AI, and an editor's story takes the top when one is published.
+function briefsSection(briefs, { lead = false } = {}) {
     if (!briefs.length) return '';
-    return String(h`<section class="home-briefs" aria-labelledby="briefs-h"><h2 id="briefs-h">AI briefs</h2>
-<p class="meta">What the reports on a subject say, summarized by OpenVibe.AI with every paragraph linked to its reports. Written by AI, not by an editor.</p>
+    return String(h`<section class="home-briefs" aria-labelledby="briefs-h">${lead ? '' : h`<h2 id="briefs-h">AI briefs</h2>`}
+<p class="meta"${lead ? raw(' id="briefs-h"') : ''}>What the reports on each subject say, summarized by OpenVibe.AI with every paragraph linked to its reports. Written by AI, not by an editor${lead ? '; stories by editors appear here first when they are published' : ''}.</p>
 <ol class="story-list">${briefs.map((b) => h`<li class="story-item"><h3 class="story-item-title"><a href="/briefs/${b.cluster_id}">${b.headline || b.label}</a> <span class="badge">AI</span></h3>
 <p class="meta">${time(b.window_end)} · from ${b.item_count} reports</p>${b.paragraphs[0] ? h`<p class="summary">${b.paragraphs[0].text.length > 240 ? `${b.paragraphs[0].text.slice(0, 237)}…` : b.paragraphs[0].text}</p>` : ''}</li>`)}</ol>
 <p><a href="/briefs">All AI briefs</a></p></section>`);
