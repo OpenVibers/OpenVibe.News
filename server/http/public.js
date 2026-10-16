@@ -91,6 +91,16 @@ function createPublicRoutes(ctx) {
         });
     }
 
+    // A topic page also carries the AI briefs and the wire on it (server/domain/topic-match.js); with nothing on it in
+    // the last 30 days, the latest from the wire overall, said as such.
+    async function topicExtras(topic) {
+        const wire = await clusters.topicWire(topic.slug, { limit: 20 });
+        const ids = new Set(wire.map((c) => c.id));
+        const topicBriefs = briefs && wire.length ? (await briefs.latest(200)).filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length && ids.has(b.cluster_id)).slice(0, 6) : [];
+        const briefed = new Set(topicBriefs.map((b) => b.cluster_id));
+        return { topicBriefs, topicWire: wire.filter((c) => !briefed.has(c.id)).slice(0, 12), latestWire: wire.length ? [] : await clusters.wire({ limit: 6 }) };
+    }
+
     async function listing(req, res, { topic = null }) {
         const page = pageNumber(req);
         const path = topic ? publication.topicPath(topic) : '/';
@@ -115,7 +125,7 @@ function createPublicRoutes(ctx) {
                 : [{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'OpenVibe.News', url: publication.abs('/') }],
             // The front page opens with what OpenVibe.News is for (openvibe-shared/showcase), then the stories.
             ...(!topic && pager.page === 1 ? { styles: [showcase.STYLESHEET] } : {}),
-            body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs })
+            body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs, ...(pager.page === 1 ? await topicExtras(topic) : {}) })
                 : (pager.page === 1 ? newsShowcase() : '') + pages.home({ items, pager, topics: await topics.list(), feeds, showcase: pager.page === 1, wire: pages.wireSection(wire), briefs: pager.page === 1 && briefs ? (await briefs.latest(12)).filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length).slice(0, 4) : [] }),
         }, { cacheable: true });
     }
