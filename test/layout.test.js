@@ -44,6 +44,13 @@ const count = (html, re) => (html.match(re) || []).length;
         }
     });
 
+    await check('/topics names its topics in its description (it said only "Topics on OpenVibe.News.")', async () => {
+        const html = (await t.get('/topics')).text;
+        const desc = (html.match(/<meta name="description" content="([^"]*)">/) || [])[1] || '';
+        assert.match(desc, /^The \d+ topics OpenVibe\.News follows, each with its stories, briefs and wire: /, desc);
+        assert.ok(desc.length <= 160, desc);
+    });
+
     await check('the shared navbar signs in through the {path} template (sign-in returns to the current page)', async () => {
         const home = await t.get('/');
         assert.ok(home.text.includes('"loginUrl":"/auth/login?next={path}"'), 'loginUrl is a {path} template');
