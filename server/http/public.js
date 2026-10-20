@@ -207,7 +207,12 @@ function createPublicRoutes(ctx) {
     }));
 
     router.get('/topics', wrap(async (req, res) => {
-        send(req, res, 200, { title: 'Topics', description: 'Topics on OpenVibe.News.', decision: pageDecision('/topics'), canonical: publication.abs('/topics'), body: pages.topicsIndex({ topics: await topics.list() }) }, { cacheable: true });
+        const list = await topics.list();
+        // It said "Topics on OpenVibe.News." (24 characters); it now names them.
+        const names = list.map((t) => t.name).join(', ');
+        const text = `The ${list.length} topics OpenVibe.News follows, each with its stories, briefs and wire: ${names}.`;
+        const description = text.length <= 160 ? text : `${text.slice(0, 159).replace(/[\s,]+\S*$/, '')}…`;
+        send(req, res, 200, { title: 'Topics', description, decision: pageDecision('/topics'), canonical: publication.abs('/topics'), body: pages.topicsIndex({ topics: list }) }, { cacheable: true });
     }));
 
     router.get('/topics/:slug', wrap(async (req, res) => {
