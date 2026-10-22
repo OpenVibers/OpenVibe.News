@@ -16,7 +16,8 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.ok(await count('news_topics') >= 10);
         for (const table of ['news_stories', 'news_source_items', 'news_story_clusters', 'news_story_revisions', 'news_editorial_flags']) assert.strictEqual(await count(table), 0, table);
         const home = await t.get('/');
-        assert.match(home.text, /The first reports are on their way/, 'an empty front page says what comes, not that nothing was published');
+        assert.ok(home.text.includes('href="/topics/space"') && !/have been published yet/.test(home.text), 'an empty front page shows its topics, not that nothing was published');
+        assert.ok(!home.text.includes('The newsroom today'), 'no reports yet: no numbers panel');
     });
 
     let reports;

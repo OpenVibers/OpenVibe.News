@@ -163,7 +163,7 @@ const BODY = [
         assert.match(home.text, /<link rel="stylesheet" href="[^"]*showcase\.css[^"]*">/);
         assert.strictEqual((home.text.match(/<h1[\s>]/g) || []).length, 1, 'one h1 on the home page');
         assert.ok(home.text.indexOf('class="sc-hero') < home.text.indexOf('Europa Clipper launches for Jupiter'), 'the showcase sits above the stories');
-        assert.match(home.text, /<h2>Latest stories<\/h2>/);
+        assert.match(home.text, /<h2 id="nh-stories-h">Latest stories<\/h2>/);
         const topic = await t.get('/topics/space');
         assert.match(topic.text, /Europa Clipper launches for Jupiter/);
         assert.ok(!topic.text.includes('sc-hero') && !topic.text.includes('showcase.css'), 'a topic page has no showcase');

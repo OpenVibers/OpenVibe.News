@@ -46,9 +46,9 @@ const SAME = { 'sec-fetch-site': 'same-origin' };
             const list = await t.get('/briefs');
             assert.ok(list.text.includes(`/briefs/${clusterId}`));
             const home = await t.get('/');
-            // With no editor's story, the briefs are the front page's latest stories: under "Latest stories", labelled AI.
-            assert.ok(home.text.includes('<h2>Latest stories</h2>') && home.text.includes(`href="/briefs/${clusterId}"`), 'the front page leads with the latest briefs');
-            assert.ok(home.text.includes('Written by AI, not by an editor; stories by editors appear here first') && home.text.includes('<span class="badge">AI</span>'));
+            // With no editor's story, the briefs lead the front page: "Latest AI briefs", each labelled AI.
+            assert.ok(home.text.includes('>Latest AI briefs</h2>') && home.text.includes(`href="/briefs/${clusterId}"`), 'the front page leads with the latest briefs');
+            assert.ok(home.text.includes('Not written or reviewed by an editor') && home.text.includes('<span class="badge badge-ai">AI brief</span>'));
             assert.ok(!home.text.includes('No stories have been published yet'));
         });
 
