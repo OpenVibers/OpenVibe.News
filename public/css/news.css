@@ -16,7 +16,7 @@ h3 { font-size: 1.1rem; margin: 1.2rem 0 .4rem; }
 .meta, .byline, .empty { color: var(--text-muted, #7386a3); font-size: .9rem; }
 .small { font-size: .85rem; }
 .badge { display: inline-block; font-size: .75rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border-light, #2c3d5c); color: var(--text-secondary); vertical-align: middle; }
-.badge-retracted { border-color: var(--danger, #ef4444); color: var(--danger, #ef4444); }
+.badge-retracted { border-color: var(--danger, #ef4444); color: var(--danger-text, var(--danger, #ef4444)); }
 .story-list, .topic-list { list-style: none; padding: 0; }
 .topic-list { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .topic-list.wide { display: block; }
@@ -30,7 +30,7 @@ h3 { font-size: 1.1rem; margin: 1.2rem 0 .4rem; }
 sup.cites { font-size: .7rem; margin-left: 2px; }
 sup.cites a { text-decoration: none; }
 .retraction { border: 2px solid var(--danger, #ef4444); border-radius: 10px; padding: 8px 16px; margin: 12px 0; }
-.retraction h2 { margin-top: .4rem; color: var(--danger, #ef4444); }
+.retraction h2 { margin-top: .4rem; color: var(--danger-text, var(--danger, #ef4444)); }
 .disclosure { border: 1px solid var(--warning, #f59e0b); border-radius: 8px; padding: 8px 12px; }
 table { width: 100%; border-collapse: collapse; font-size: .95rem; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border, #1f2d47); vertical-align: top; }
