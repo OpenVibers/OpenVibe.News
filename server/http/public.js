@@ -33,11 +33,17 @@ const access = require('../domain/access');
 const { csrfToken, checkCsrf } = require('../auth/forms');
 const cache = require('openvibe-shared/cache-policy');
 const { SITE_SUMMARY } = require('./discovery');
+const homePage = require('../render/home');
+const { createHome } = require('../domain/home');
+
+// The front page in search results and share cards (≤ 160 characters).
+const HOME_DESCRIPTION = 'News you can check: AI briefs and stories where every paragraph links the reports it rests on, a live wire of public sources, and topic pages.';
 
 const PER_PAGE = 20;
 
 function createPublicRoutes(ctx) {
     const { config, store, stories, publication, reading, topics, viewers, community, discussion, clusters, briefs } = ctx;
+    const homeData = ctx.home || createHome({ store });
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
 
@@ -73,24 +79,6 @@ function createPublicRoutes(ctx) {
     const FEEDS = [{ type: 'rss', label: 'RSS', file: 'feed.xml' }, { type: 'atom', label: 'Atom', file: 'atom.xml' }, { type: 'json', label: 'JSON Feed', file: 'feed.json' }];
     const feedsFor = (base) => FEEDS.map((f) => ({ type: f.type, label: f.label, href: `${base === '/' ? '' : base}/${f.file}`, title: f.label }));
 
-    /** The product's own words above the front page's stories: only what OpenVibe.News does today. */
-    function newsShowcase() {
-        return showcase.hero({
-            eyebrow: 'OpenVibe.News',
-            title: 'News you can', accent: 'check',
-            lede: 'Every paragraph links the reports it rests on. Corrections and retractions stay on the record, and anyone can read without an account.',
-            actions: [{ label: 'Read the stories', href: '#stories', primary: true }, { label: 'Browse topics', href: '/topics' }],
-        }) + showcase.features({
-            title: 'How a story is built',
-            items: [
-                { icon: 'ov:news', title: 'Cited paragraphs', text: 'Each paragraph names the sources behind it, with outlet, authors and date.' },
-                { icon: 'ov:history', title: 'Revisions on the record', text: 'Corrections and retractions are kept and shown, never quietly edited away.' },
-                { icon: 'ov:search', title: 'Source checks', text: 'When a source changes or is removed upstream, the story says so while editors check it.' },
-                { icon: 'ov:community', title: 'Discussion', text: 'Talk about a story on OpenVibe.Community with your OpenVibe account.' },
-            ],
-        });
-    }
-
     // A topic page also carries the AI briefs and the wire on it (server/domain/topic-match.js); with nothing on it in
     // the last 30 days, the latest from the wire overall, said as such.
     async function topicExtras(topic) {
@@ -112,6 +100,23 @@ function createPublicRoutes(ctx) {
         const wire = !topic && page === 1 ? await clusters.wire({ limit: 8 }) : [];
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         const feeds = feedsFor(path);
+        // The front page (page 1): what OpenVibe.News is for, then everything it has to read (render/home.js).
+        if (!topic && pager.page === 1) {
+            const [stats, latestBriefs, topicList, tally, outlets] = await Promise.all([
+                homeData.stats(), briefs ? briefs.latest(12) : [], topics.list(), homeData.topicTally(), homeData.outlets(),
+            ]);
+            return send(req, res, 200, {
+                title: null, description: HOME_DESCRIPTION, summary: SITE_SUMMARY,
+                decision: pageDecision(canonical, { empty: total === 0 && !wire.length && !stats.week, query: ['page'] }),
+                canonical, feeds, next: pager.next ? pager.next.href : null,
+                jsonLd: homePage.homeJsonLd({ abs: (p) => publication.abs(p), topics: topicList, outlets }),
+                styles: [showcase.STYLESHEET], bodyClass: 'news-home',
+                body: homePage.homeBody({
+                    items, pager, feeds, stats, wire: pages.wireSection(wire), topics: topicList, tally, outlets,
+                    briefs: latestBriefs.filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length).slice(0, 6),
+                }),
+            }, { cacheable: true });
+        }
         const crumbs = topic ? [{ name: 'OpenVibe.News', url: '/' }, { name: 'Topics', url: '/topics' }, { name: topic.name }] : null;
         send(req, res, 200, {
             title: topic ? topic.name : null,
@@ -123,10 +128,8 @@ function createPublicRoutes(ctx) {
             jsonLd: topic
                 ? [seo.structuredData.breadcrumbs(crumbs.map((c) => ({ name: c.name, url: c.url ? publication.abs(c.url) : canonical })))]
                 : [{ '@context': 'https://schema.org', '@type': 'WebSite', name: 'OpenVibe.News', url: publication.abs('/') }],
-            // The front page opens with what OpenVibe.News is for (openvibe-shared/showcase), then the stories.
-            ...(!topic && pager.page === 1 ? { styles: [showcase.STYLESHEET] } : {}),
             body: topic ? pages.topicPage({ topic, items, pager, feeds, breadcrumbs: crumbs, ...(pager.page === 1 ? await topicExtras(topic) : {}) })
-                : (pager.page === 1 ? newsShowcase() : '') + pages.home({ items, pager, topics: await topics.list(), feeds, showcase: pager.page === 1, wire: pages.wireSection(wire), briefs: pager.page === 1 && briefs ? (await briefs.latest(12)).filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length).slice(0, 4) : [] }),
+                : pages.home({ items, pager, topics: await topics.list(), feeds }),
         }, { cacheable: true });
     }
 

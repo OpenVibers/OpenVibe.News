@@ -35,21 +35,15 @@ function feedLinksHtml(feeds) {
     return h`<p class="feeds">Follow: ${feeds.map((f) => h`<a href="${f.href}">${f.label}</a> `)}</p>`;
 }
 
-// With the showcase above it (page 1), the showcase hero is the page's h1 and says what the site is,
-// so the list header is a plain "Latest stories" h2; later pages keep the site's own h1 and lede.
-function home({ items, pager, topics, feeds, showcase = false, wire = '', briefs = [] }) {
-    return String(h`${showcase ? h`<header class="site-header"><h2>Latest stories</h2>
-${raw(feedLinksHtml(feeds))}
-</header>` : h`<header class="site-header">
+// The front page's later pages (page 1 is render/home.js): the site's own h1 and lede, then the stories.
+function home({ items, pager, topics, feeds }) {
+    return String(h`<header class="site-header">
 <h1>OpenVibe.News</h1>
 <p class="lede">Source-backed stories. Every paragraph cites the reports it rests on; corrections and retractions stay on the record.</p>
 ${raw(feedLinksHtml(feeds))}
-</header>`}
-${items.length || !showcase ? h`<section id="stories" aria-label="Stories">${storyList(items, 'No stories on this page.')}</section>
-${raw(ssr.paginationHtml(pager))}` : ''}
-${raw(briefsSection(briefs, { lead: showcase && !items.length }))}
-${showcase && !items.length && !briefs.length && !wire ? h`<p class="empty">The first reports are on their way: the AI briefs and the wire fill in as the sources report.</p>` : ''}
-${raw(wire)}
+</header>
+<section id="stories" aria-label="Stories">${storyList(items, 'No stories on this page.')}</section>
+${raw(ssr.paginationHtml(pager))}
 ${topics.length ? h`<section class="side" aria-label="Topics"><h2>Topics</h2><ul class="topic-list">${topics.map((t) => h`<li><a href="/topics/${t.slug}">${t.name}</a></li>`)}</ul></section>` : ''}`);
 }
 

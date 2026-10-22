@@ -44,7 +44,7 @@ const { boot, check, done } = require('./helpers/boot');
         assert.match(full.headers.get('content-type'), /^text\/plain/);
         assert.strictEqual(full.headers.get('cache-control'), 'public, max-age=3600, stale-while-revalidate=3600');
         assert.match(full.text, /^# OpenVibe\.News/);
-        assert.match(full.text, /source-backed publication/);
+        assert.match(full.text, /Source-backed news: AI briefs and editors' stories/);
         assert.ok(Buffer.byteLength(full.text, 'utf8') <= 512 * 1024, 'no stories: within maxBytes');
         const idx = (await t.get('/sitemap.xml')).text;
         assert.match(idx, /<sitemapindex/);

@@ -78,3 +78,43 @@ form.inline button { margin: 0 0 0 8px; padding: 2px 10px; font-size: .85rem; }
 .wire-cluster { padding: 10px 0; border-bottom: 1px solid var(--border, #1f2d47); overflow-wrap: anywhere; }
 .wire-lead { margin: 0; font-weight: 600; }
 .wire a { color: var(--text-primary); }
+/* The front page (render/home.js): a wider column, the numbers beside the hero, brief cards, topics, outlets. */
+body.news-home .page { max-width: 1120px; }
+.nh-panel { padding: 18px; border: 1px solid var(--border, #1f2d47); border-radius: 16px; background: var(--bg-card, #131c2e); }
+.page .nh-panel-h { margin: 0 0 12px; font-size: 1rem; }
+.nh-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+.nh-stats div { display: flex; flex-direction: column-reverse; padding: 10px 12px; border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-primary, #0a0f1c); }
+.nh-stats dt { font-size: 13px; line-height: 1.35; color: var(--text-secondary, #96a7c2); }
+.nh-stats dd { margin: 0; font-size: 1.55rem; font-weight: 800; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.nh-live { margin: 12px 0 0; font-size: .95rem; }
+.live-dot { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: #ef4444; vertical-align: middle; }
+.badge-ai { background: color-mix(in srgb, #a78bfa 18%, transparent); color: color-mix(in srgb, #8b5cf6 70%, var(--text-primary, #e6edf7)); border: 1px solid color-mix(in srgb, #a78bfa 45%, transparent); }
+.nh-cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+.nh-card { display: flex; flex-direction: column; min-width: 0; padding: 14px 16px; border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); }
+.nh-card h3 { margin: 4px 0; font-size: 1.05rem; line-height: 1.35; }
+.nh-card h3 a { color: var(--text-primary, #e6edf7); text-decoration: none; }
+.nh-card h3 a:hover { text-decoration: underline; }
+.nh-card .meta { margin: 0; color: var(--text-secondary, #96a7c2); }
+.nh-kicker { margin: 0; font-size: .85rem; color: var(--text-secondary, #96a7c2); }
+.nh-kicker .badge-ai { color: color-mix(in srgb, #8b5cf6 55%, var(--text-primary, #e6edf7)); }   /* 4.49:1 at 70% on a card */
+.nh-sum { margin: 6px 0 0; font-size: .95rem; color: var(--text-secondary, #96a7c2); display: -webkit-box; -webkit-line-clamp: 4; line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.nh-more { margin: 14px 0 0; }
+.nh-wire .wire { margin-top: 0; border-top: 0; }
+.nh-wire .meta { color: var(--text-secondary, #96a7c2); }
+.nh-topics, .nh-outlets { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); }
+.nh-topics li, .nh-outlets li { display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 14px 16px; border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); overflow-wrap: anywhere; }
+.nh-topics h3 { margin: 0; font-size: 1.05rem; }
+.nh-topics p { margin: 0; }
+.nh-count { font-size: .88rem; color: var(--text-secondary, #96a7c2); }
+.nh-latest { font-size: .92rem; line-height: 1.45; }
+.nh-latest a { color: var(--text-primary, #e6edf7); }
+.nh-latest .meta, .nh-topics .meta { color: var(--text-secondary, #96a7c2); font-size: .85rem; }
+.nh-faq details { border-bottom: 1px solid var(--border, #1f2d47); padding: 10px 0; }
+.nh-faq summary { cursor: pointer; font-weight: 600; }
+.nh-faq details p { margin: 8px 0 0; color: var(--text-secondary, #96a7c2); max-width: 760px; }
+.nh-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); }
+.nh-links a { display: block; height: 100%; padding: 12px 14px; border: 1px solid var(--border, #1f2d47); border-radius: 12px; background: var(--bg-card, #131c2e); color: var(--text-primary, #e6edf7); text-decoration: none; }
+.nh-links a:hover { border-color: var(--accent, #3b82f6); }
+.nh-links b { display: block; }
+.nh-links small { display: block; color: var(--text-secondary, #96a7c2); font-size: .88rem; line-height: 1.45; }
+@media (max-width: 560px) { .nh-stats dd { font-size: 1.3rem; } .nh-card .nh-sum { -webkit-line-clamp: 3; line-clamp: 3; } }

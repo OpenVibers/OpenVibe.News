@@ -21,7 +21,7 @@ const sharedSeo = require('openvibe-shared/seo');
 const cache = require('openvibe-shared/cache-policy');
 
 // The one-line site summary /llms.txt, /llms-full.txt and the home page all carry.
-const SITE_SUMMARY = 'A source-backed publication: stories written by OpenVibe.News editors from source items collected by OpenVibe.Sources. Every paragraph cites the sources it rests on.';
+const SITE_SUMMARY = 'Source-backed news: AI briefs and editors\' stories where every paragraph cites the reports it rests on, a live wire of what public sources (collected by OpenVibe.Sources) report, and topic pages.';
 
 function createDiscoveryRoutes({ config, store, publication, topics }) {
     const router = express.Router();
