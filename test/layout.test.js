@@ -93,7 +93,7 @@ const count = (html, re) => (html.match(re) || []).length;
         const head = home.slice(0, home.indexOf('</head>'));
         assert.strictEqual(count(head, /<title>/g), 1);
         assert.ok(head.includes('<link rel="canonical" href="https://openvibe.news/">'));
-        assert.strictEqual(count(head, /<script type="application\/ld\+json">/g), 4, 'the home WebSite, the topics ItemList, the FAQPage and the AI-summary WebPage JSON-LD');
+        assert.strictEqual(count(head, /<script type="application\/ld\+json">/g), 5, "the home WebSite, the topics ItemList, the FAQPage, the AI-summary WebPage and OpenVibe's Organization (Shared 4.13 headTags) JSON-LD");
         assert.ok(head.includes('"@type":"ItemList"') && head.includes('"@type":"FAQPage"'), 'the topics and the questions shown');
         assert.ok(head.includes('"@type":"WebSite"'), 'the site JSON-LD');
         assert.ok(head.includes('"@type":"WebPage"'), 'the AI summary WebPage JSON-LD');
