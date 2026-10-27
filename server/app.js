@@ -163,7 +163,8 @@ async function createApp(opts = {}) {
     app.use(cookieParser());
 
     // ── Sign-in (OAuth2 client of OpenVibe.Network) ─────────
-    app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, standardHeaders: true, legacyHeaders: false }));
+    // /auth/me is the navbar's who-is-signed-in read on every page, so it is not counted with sign-ins: 60 page views in 15 minutes made a signed-in visitor look signed out.
+    app.use('/auth/', rateLimit({ windowMs: 15 * 60_000, max: 60, skip: (req) => req.path === '/me', standardHeaders: true, legacyHeaders: false }));
     app.use('/auth', auth.router(express));
     { const legal = require('openvibe-shared/legal'); app.get(legal.PATHS, legal.handler({ id: 'news', service: 'news', host: 'openvibe.news', name: 'OpenVibe.News' })); }
 
