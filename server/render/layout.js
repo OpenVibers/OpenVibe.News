@@ -18,12 +18,14 @@ const frame = require('openvibe-shared/frame');
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.News';
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+// The product's own places: the main ones carry an icon (phones get them as the bottom tab bar), the rest fold
+// into the navbar's More (Shared 4.22). Search is the navbar's magnifier; What shipped is the footer's.
 const NAV_LINKS = [
-    { label: 'News', href: '/' },
-    { label: 'Topics', href: '/topics' },
-    { label: 'Wire', href: '/wire' },
-    { label: 'Live', href: '/live' },
-    { label: 'AI briefs', href: '/briefs' },
+    { label: 'News', href: '/', icon: 'fa-newspaper' },
+    { label: 'Topics', href: '/topics', icon: 'fa-tag' },
+    { label: 'Wire', href: '/wire', icon: 'fa-bolt' },
+    { label: 'Live', href: '/live', icon: 'fa-tower-broadcast' },
+    { label: 'AI briefs', href: '/briefs', icon: 'fa-brain' },
 ];
 
 const hashes = new Map();
@@ -57,6 +59,7 @@ function renderPage(o) {
         service: 'news',
         apiBase: NETWORK_URL,
         links: NAV_LINKS,
+        appBar: true,   // phones: the five places as the bottom tab bar (Shared 4.20)
         history: { type: 'page', title: o.title || SITE_NAME },
         silentLogin: `${o.config.baseUrl}/auth/login?silent=1&next={url}`,
         sessionUrl: '/auth/me',
