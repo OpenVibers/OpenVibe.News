@@ -57,6 +57,7 @@ function createDiscoveryRoutes(ctx) {
             '# sign-in and the API are not for crawling. Pages decide their own indexability (meta robots /',
             '# X-Robots-Tag): retracted stories stay readable but are noindex. A Disallow is not a noindex.',
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/edit', '/clusters/', '/auth/', '/api/', '/internal/'] }),
+            `# Agent manifest: ${abs('/.well-known/agent.json')}`,
         ].join('\n');
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(body);
     });

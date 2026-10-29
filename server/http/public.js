@@ -50,6 +50,7 @@ function createPublicRoutes(ctx) {
     function cacheHeaders(res, { cacheable, robots }) {
         res.vary('Cookie');
         res.vary('Authorization');
+        res.vary('Accept');
         if (cacheable) res.set('Cache-Control', cache.htmlHeaders({ maxAge: 60 }));
         else res.set('Cache-Control', cache.htmlHeaders({ private: true }));
         if (robots && robots !== 'index, follow') res.set('X-Robots-Tag', robots);
@@ -57,7 +58,12 @@ function createPublicRoutes(ctx) {
 
     function send(req, res, status, page, { cacheable = false } = {}) {
         cacheHeaders(res, { cacheable: cacheable && req.viewer.kind === 'anonymous' && status === 200, robots: page.decision.robots });
-        res.status(status).type('html').send(renderPage({ ...page, viewer: req.viewer, config, path: req.originalUrl, editor: access.isEditor(config, req.viewer) }));
+        // The public pages with a Markdown twin (server/agent-pages.js) name it in the head and in the Link header.
+        const canonical = page.canonical || `${config.baseUrl}${req.path}`;
+        const hasTwin = status === 200 && require('../agent-pages').TWIN_PATH_RE.test(req.path);
+        const head = hasTwin ? require('openvibe-shared/agent-layer').linkHeaderTags(canonical, `${config.baseUrl}/llms.txt`) : null;
+        if (head) res.set('Link', head.header);
+        res.status(status).type('html').send(renderPage({ ...page, viewer: req.viewer, config, path: req.originalUrl, editor: access.isEditor(config, req.viewer), head: head ? head.head : '' }));
     }
 
     /** A decision for a page that is not a story (lists, messages). */
