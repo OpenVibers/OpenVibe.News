@@ -30,8 +30,7 @@ const { boot, check, done } = require('./helpers/boot');
         assert.ok([200, 404].includes(m.status));
     });
 
-    await check('robots.txt: sitemap, automated-consumer policy, editor/API disallowed; llms.txt; sitemap index', async () => {
-        const robots = (await t.get('/robots.txt')).text;
+    await check('robots.txt: sitemap, automated-consumer policy, editor/API disallowed; llms.txt; sitemap index', async () => {        const robots = (await t.get('/robots.txt')).text;
         assert.match(robots, /Sitemap: https:\/\/openvibe\.news\/sitemap\.xml/);
         assert.match(robots, /automated-consumer policy/);
         for (const p of ['/edit', '/clusters/', '/api/', '/internal/']) assert.ok(robots.includes(`Disallow: ${p}`), p);
@@ -56,6 +55,25 @@ const { boot, check, done } = require('./helpers/boot');
         assert.match(home.text, /<meta name="robots" content="noindex, follow">/, 'an empty front page is not offered for indexing');
         assert.match(home.text, /<meta name="ai-summary" content="[^"]+">/, 'the home carries the site AI summary');
         assert.match(home.text, /"@type":"WebPage"/, 'and its WebPage JSON-LD twin');
+    });
+
+    await check('security.txt: RFC 9116, canonical to this site, valid for a year', async () => {
+        const r = await t.get('/.well-known/security.txt');
+        assert.strictEqual(r.status, 200);
+        assert.strictEqual(r.headers.get('content-type'), 'text/plain; charset=utf-8');
+        assert.strictEqual(r.headers.get('cache-control'), 'public, max-age=86400');
+        const fields = new Map();
+        for (const line of r.text.split('\n')) if (line.trim()) {
+            const m = line.match(/^([A-Za-z-]+): (.+)$/);
+            assert.ok(m, `every security.txt line is "Name: value" (got "${line}")`);
+            fields.set(m[1], m[2]);
+        }
+        for (const key of ['Contact', 'Expires', 'Preferred-Languages', 'Canonical', 'Policy']) assert.ok(fields.has(key), `security.txt names ${key}`);
+        assert.strictEqual(fields.get('Contact'), 'mailto:security@openvibe.network');
+        assert.ok(Date.parse(fields.get('Expires')) > Date.now(), 'Expires is in the future');
+        const canonical = new URL(fields.get('Canonical'));
+        assert.strictEqual(canonical.host, 'openvibe.news', 'Canonical is this site\'s own host');
+        assert.strictEqual(canonical.pathname, '/.well-known/security.txt');
     });
 
     await check('legal pages, 404s and API problems', async () => {

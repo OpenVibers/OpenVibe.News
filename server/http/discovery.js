@@ -28,6 +28,9 @@ const SITE_SUMMARY = 'Source-backed news: AI briefs and editors\' stories where 
 // What /llms.txt and /llms-full.txt both say about how the publication works.
 const SITE_DETAILS = 'OpenVibe.News is not an automatic headline generator. Each story page lists its sources (headline, outlet, author and date as the source published them, with links), a timeline, editor-assigned perspective groupings and its full correction history. Full article text from sources is never republished; at most a short summary where the source’s terms allow it. AI-assisted drafts are never published or indexed before a person reviews them. Retracted stories stay at their URL with a retraction notice and are noindex. Append .json to any story URL for the same content as data, including every claim’s source numbers and the Sources item ids.';
 
+// The date /.well-known/security.txt must be refreshed by: one year on, a person re-reads and re-commits it.
+const SECURITY_EXPIRES = '2027-10-29T00:00:00.000Z';
+
 function createDiscoveryRoutes(ctx) {
     const { config, store, publication, topics, stories, clusters } = ctx;
     const homeData = ctx.home || createHome({ store });
@@ -56,6 +59,21 @@ function createDiscoveryRoutes(ctx) {
             sharedSeo.robotsTxt({ sitemaps: [abs('/sitemap.xml')], disallow: ['/edit', '/clusters/', '/auth/', '/api/', '/internal/'] }),
         ].join('\n');
         res.type('text/plain').set('Cache-Control', cache.htmlHeaders({ maxAge: 3600 })).send(body);
+    });
+
+    // /.well-known/security.txt (RFC 9116, SEO-30). Contact, Expires and Canonical are required; Canonical is
+    // this site's own, from the config, never a constant. Policy is listed only while
+    // https://openvibe.network/security answers 200 (checked 2026-10-29). Expires is the date the file must be
+    // refreshed by: one year on, a person re-reads and re-commits it.
+    router.get('/.well-known/security.txt', (_req, res) => {
+        res.type('text/plain; charset=utf-8').set('Cache-Control', 'public, max-age=86400').send([
+            'Contact: mailto:security@openvibe.network',
+            `Expires: ${SECURITY_EXPIRES}`,
+            'Preferred-Languages: en',
+            `Canonical: ${abs('/.well-known/security.txt')}`,
+            'Policy: https://openvibe.network/security',
+            '',
+        ].join('\n'));
     });
 
     router.get('/llms.txt', (_req, res) => {
