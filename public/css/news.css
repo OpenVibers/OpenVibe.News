@@ -118,3 +118,17 @@ body.news-home .page { max-width: 1120px; }
 .nh-links b { display: block; }
 .nh-links small { display: block; color: var(--text-secondary, #96a7c2); font-size: .88rem; line-height: 1.45; }
 @media (max-width: 560px) { .nh-stats dd { font-size: 1.3rem; } .nh-card .nh-sum { -webkit-line-clamp: 3; line-clamp: 3; } }
+
+/* Phones (2026-10-29): a taste and a door. Three briefs, four wire subjects, six topics and three sources show; every
+   list is a link away. The explainers are one fold. */
+.nh-fold { border: 1px solid var(--border, #1f2d47); border-radius: 14px; background: var(--bg-card, #131c2e); }
+.nh-fold > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 16px; cursor: pointer; font-weight: 700; list-style: none; }
+.nh-fold > summary::-webkit-details-marker { display: none; }
+.nh-fold > summary span { color: var(--text-muted, #7386a3); font-weight: 600; font-size: .86rem; }
+.nh-fold > summary:focus-visible { outline: 2px solid var(--accent, #3b82f6); outline-offset: -2px; border-radius: 14px; }
+.nh-fold .sc-sec { margin: 0; max-width: none; padding: 0 16px 16px; }
+@media (max-width: 599px) {
+  .nh-cards > li:nth-child(n+4), .nh-outlets > li:nth-child(n+4) { display: none; }
+  .nh-wire .wire-list > li:nth-child(n+5) { display: none; }
+  .nh-topics > li:nth-child(n+7) { display: none; }
+}

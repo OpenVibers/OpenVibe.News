@@ -58,7 +58,8 @@ function homeBody(o) {
         eyebrow: 'OpenVibe.News',
         title: 'News you can', accent: 'check',
         lede: 'Every paragraph links the reports it rests on. Read AI briefs that cite every claim, watch reports arrive live, and check any of it yourself. No account needed.',
-        actions: [{ label: 'Read the latest', href: '#latest', primary: true }, { label: 'Live', href: '/live' }, { label: 'Browse topics', href: '#topics' }],
+        // Two, so they sit side by side on a phone; the topics are a section of their own below.
+        actions: [{ label: 'Read the latest', href: '#latest', primary: true }, { label: 'Live', href: '/live' }],
         aside: stats ? { html: statsPanel(stats) } : undefined,
     }))}
 <div id="latest"></div>
@@ -76,12 +77,11 @@ ${topics.length ? h`<section class="sc-sec nh-sec" id="topics" aria-labelledby="
         const href = item ? httpHref(item.url) : null;
         return h`<li><h3><a href="/topics/${t.slug}">${t.name}</a></h3>${x ? h`<p class="nh-count">${plural(x.subjects, 'subject')}, ${plural(x.reports, 'report')}</p>` : ''}
 ${item ? h`<p class="nh-latest">${href ? h`<a href="${href}" rel="nofollow noopener" target="_blank">${item.headline}</a>` : item.headline} <span class="meta">${item.outlet}</span></p>` : (t.description ? h`<p class="nh-latest meta">${t.description}</p>` : '')}</li>`;
-    })}</ul></section>` : ''}
+    })}</ul><p class="nh-more"><a href="/topics">All ${plural(topics.length, 'topic')}</a></p></section>` : ''}
 ${outlets.length ? h`<section class="sc-sec nh-sec" aria-labelledby="nh-outlets-h"><h2 id="nh-outlets-h">The sources we read</h2>
 <p class="sc-lede">Public feeds, collected by OpenVibe.Sources with each publisher's terms and robots.txt checked. Headlines, links and short summaries only.</p>
 <ul class="nh-outlets">${outlets.map((x) => h`<li><b>${x.outlet}</b><span class="nh-count">${plural(x.week, 'report')} this week · ${num(x.month)} in 30 days</span>${x.latest ? h`<span class="nh-latest">Newest: ${httpHref(x.latest.url) ? h`<a href="${httpHref(x.latest.url)}" rel="nofollow noopener" target="_blank">${x.latest.headline}</a>` : x.latest.headline}</span>` : ''}</li>`)}</ul></section>` : ''}
-${raw(showcase.features({
-        title: 'How a story is built',
+<div class="sc-sec nh-sec"><details class="nh-fold"><summary>How a story is built<span>citations, revisions, briefs</span></summary>${raw(showcase.features({
         items: [
             { icon: 'ov:news', title: 'Cited paragraphs', text: 'Each paragraph names the sources behind it, with outlet, authors and date.' },
             { icon: 'ov:history', title: 'Revisions on the record', text: 'Corrections and retractions are kept and shown, never quietly edited away.' },
@@ -97,16 +97,8 @@ ${raw(showcase.steps({
             { title: 'AI writes a cited brief', text: 'Once enough reports cover a subject, OpenVibe.AI summarises them. Every paragraph links the reports it used.', href: '/briefs' },
             { title: 'Editors write the stories', text: 'Stories cite every paragraph. Corrections and retractions stay on the record.' },
         ],
-    }))}
-<section class="sc-sec nh-sec nh-faq" aria-labelledby="nh-faq-h"><h2 id="nh-faq-h">Questions</h2>${questions.map((f) => h`<details><summary>${f.q}</summary><p>${f.a}</p></details>`)}</section>
-<section class="sc-sec nh-sec" aria-labelledby="nh-links-h"><h2 id="nh-links-h">Find your way around</h2><ul class="nh-links">
-<li><a href="/live"><b>Live</b><small>The newest reports as they arrive, with what is breaking.</small></a></li>
-<li><a href="/briefs"><b>AI briefs</b><small>Every subject's brief, in three tones.</small></a></li>
-<li><a href="/wire"><b>The wire</b><small>Every subject the sources reported, grouped.</small></a></li>
-<li><a href="/topics"><b>Topics</b><small>${plural(topics.length, 'topic')}, each with its briefs and wire.</small></a></li>
-<li><a href="/feed.xml"><b>Feeds</b><small>RSS, Atom and JSON Feed for the stories and each topic.</small></a></li>
-<li><a href="/updates"><b>What shipped</b><small>Every change to OpenVibe.News itself.</small></a></li>
-</ul></section>`);
+    }))}</details></div>
+<section class="sc-sec nh-sec nh-faq" aria-labelledby="nh-faq-h"><h2 id="nh-faq-h">Questions</h2>${questions.map((f) => h`<details><summary>${f.q}</summary><p>${f.a}</p></details>`)}</section>`);
 }
 
 /** Structured data for the front page: the site, its topic pages as an ItemList (indexed pages), the questions shown. */
