@@ -106,8 +106,9 @@ function renderPage(o) {
         home: '/',
         css: asset('css/news.css'),
         styles: o.styles,   // openvibe-shared stylesheet names (the home page's showcase.css)
-        // This service's own extra stylesheets for one kind of page (the briefs and live pages' css/briefs.css).
-        head: (o.localStyles || []).map((rel) => `<link rel="stylesheet" href="${asset(rel)}">`).join('\n'),
+        // This service's own extra stylesheets for one kind of page (the briefs and live pages' css/briefs.css)
+        // and the discovery tags of the page's Markdown twin (public.js's send adds both together).
+        head: [...(o.localStyles || []).map((rel) => `<link rel="stylesheet" href="${asset(rel)}">`), o.head].filter(Boolean).join('\n'),
         release: RELEASE,
         account,
         body: o.body,
