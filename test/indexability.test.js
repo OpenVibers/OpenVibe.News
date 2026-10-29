@@ -121,7 +121,28 @@ async function storyOn(t, headline, items) {
         assert.ok(r.text.includes('Officials confirmed on Tuesday'), 'the editor summary text is the page text');
         assert.ok(Buffer.byteLength(r.text, 'utf8') <= 512 * 1024, 'within maxBytes');
     });
+    await check('the sitemap index leads to the site\'s own pages, not only to stories', async () => {
+        assert.match((await t.get('/sitemap.xml')).text, /<loc>https:\/\/openvibe\.news\/sitemaps\/pages\.xml<\/loc>/);
+        assert.match((await t.get('/sitemaps/pages.xml')).text, /<loc>https:\/\/openvibe\.news\/<\/loc>/, 'a site with content indexes its front page');
+    });
     await t.close();
+
+    // The quiet site: the seeded topics and nothing published yet. Its sitemap and its AI map must say
+    // what the site is and where its pages are — never answer with an empty <urlset> or a bare header.
+    const quiet = await boot();
+    await check('a quiet site still lists its own pages in the sitemap and its topics in llms-full.txt', async () => {
+        const pages = (await quiet.get('/sitemaps/pages.xml')).text;
+        assert.match(pages, /<loc>https:\/\/openvibe\.news\/topics<\/loc>/);
+        assert.match(pages, /<loc>https:\/\/openvibe\.news\/updates<\/loc>/);
+        assert.doesNotMatch(pages, /<loc>https:\/\/openvibe\.news\/<\/loc>/, 'the front page with no story, wire or report is noindex, and the sitemap agrees');
+        const full = await quiet.get('/llms-full.txt');
+        assert.strictEqual(full.status, 200);
+        assert.ok(Buffer.byteLength(full.text, 'utf8') > 2048, `not a bare header (${Buffer.byteLength(full.text, 'utf8')} bytes)`);
+        assert.match(full.text, /## Topics/);
+        assert.match(full.text, /https:\/\/openvibe\.news\/topics\/space/, 'each seeded topic page is listed');
+        assert.doesNotMatch(full.text, /## Stories/, 'no story section when no story is published');
+    });
+    await quiet.close();
 
     const one = await boot({ env: { NEWS_MIN_INDEPENDENT_SOURCES: '1' } });
     await check('NEWS_MIN_INDEPENDENT_SOURCES=1 restores the one-source gate', async () => {
