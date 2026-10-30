@@ -34,6 +34,7 @@ const { csrfToken, checkCsrf } = require('../auth/forms');
 const cache = require('openvibe-shared/cache-policy');
 const { SITE_SUMMARY } = require('./discovery');
 const homePage = require('../render/home');
+const { pickListRules } = require('../render/short');
 const { createHome } = require('../domain/home');
 
 // The front page in search results and share cards (≤ 160 characters).
@@ -111,15 +112,18 @@ function createPublicRoutes(ctx) {
             const [stats, latestBriefs, topicList, tally, outlets] = await Promise.all([
                 homeData.stats(), briefs ? briefs.latest(12) : [], topics.list(), homeData.topicTally(), homeData.outlets(),
             ]);
+            const homeBriefs = latestBriefs.filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length).slice(0, 6);
             return send(req, res, 200, {
                 title: null, description: HOME_DESCRIPTION, summary: SITE_SUMMARY,
                 decision: pageDecision(canonical, { empty: total === 0 && !wire.length && !stats.week, query: ['page'] }),
                 canonical, feeds, next: pager.next ? pager.next.href : null,
                 jsonLd: homePage.homeJsonLd({ abs: (p) => publication.abs(p), topics: topicList, outlets }),
                 styles: [showcase.STYLESHEET], bodyClass: 'news-home',
+                // The rule that shows the picked item of each pick list: one per item, written for this page.
+                inlineStyles: [`@supports selector(:has(*)){@media (max-width:640px){${pickListRules('stories', items.length)}${pickListRules('briefs', homeBriefs.length)}${pickListRules('wire', wire.length)}${pickListRules('topics', topicList.length)}}}`],
                 body: homePage.homeBody({
-                    items, pager, feeds, stats, wire: pages.wireSection(wire), topics: topicList, tally, outlets,
-                    briefs: latestBriefs.filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length).slice(0, 6),
+                    items, pager, feeds, stats, wire: pages.wireSection(wire), wireClusters: wire, topics: topicList, tally, outlets,
+                    briefs: homeBriefs,
                 }),
             }, { cacheable: true });
         }

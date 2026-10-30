@@ -17,17 +17,21 @@ const time = (v) => raw(ssr.timeTag(v == null ? null : new Date(v).toISOString()
 const httpHref = (u) => { try { const x = new URL(String(u)); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; } };
 const cites = (ns) => h`<sup class="cites">${ns.map((n, i) => h`${i ? ',' : ''}<a href="#source-${n}" aria-label="source ${n}">${n}</a>`)}</sup>`;
 
-function storyListItem(it) {
-    return h`<li class="story-item${it.retracted ? ' retracted' : ''}">
+function storyListItem(it, i = null) {
+    // On the front page a phone picks one story at a time (the owner's short-pages rule): each story carries the
+    // index its chip picks. The index is a number, so it needs no quotes.
+    return h`<li${i == null ? '' : ` data-i=${i}`} class="story-item${it.retracted ? ' retracted' : ''}">
 <h2 class="story-item-title"><a href="${it.url}">${it.headline}</a>${it.retracted ? h` <span class="badge badge-retracted">Retracted</span>` : ''}</h2>
 <p class="meta">${time(it.published_at)}${it.topic ? h` · <a href="${it.topic.url}">${it.topic.name}</a>` : ''} · ${it.sourceCount} ${it.sourceCount === 1 ? 'source' : 'sources'}${it.outlets.length ? h` (${it.outlets.join(', ')})` : ''}</p>
 ${it.lede ? h`<p class="summary">${it.lede}</p>` : ''}
 </li>`;
 }
 
-function storyList(items, empty) {
+function storyList(items, empty, { pick = false } = {}) {
     if (!items.length) return h`<p class="empty">${empty}</p>`;
-    return h`<ol class="story-list">${items.map(storyListItem)}</ol>`;
+    // On the front page a phone picks one story at a time (the owner's short-pages rule): each story carries the
+    // index its chip picks.
+    return h`<ol class="story-list${pick ? ' pick-list' : ''}">${items.map((it, i) => storyListItem(it, pick ? i : null))}</ol>`;
 }
 
 function feedLinksHtml(feeds) {
@@ -63,10 +67,10 @@ function briefsSection(briefs, { lead = false } = {}) {
 // headline and link; nothing here is written by News.
 const WIRE_NOTE = 'Grouped automatically from the reports OpenVibe.Sources collects. Nothing here is written by OpenVibe.News: each line is the outlet\'s own headline and links to its report.';
 
-function wireCluster(c, { brief = false } = {}) {
+function wireCluster(c, { brief = false, i = null } = {}) {
     const items = brief ? c.items.slice(0, 1) : c.items;
     const outlets = [...new Set(c.items.map((i) => i.outlet).filter(Boolean))];
-    return h`<li class="wire-cluster" id="wire-${c.id}">
+    return h`<li class="wire-cluster" id="wire-${c.id}"${i == null ? '' : ` data-i=${i}`}>
 ${brief ? h`<p class="wire-lead">${wireLink(items[0])}</p><p class="meta">${time(items[0].published_at)} · ${c.items.length} ${c.items.length === 1 ? 'report' : 'reports'}${outlets.length ? h` (${outlets.slice(0, 4).join(', ')}${outlets.length > 4 ? ` and ${outlets.length - 4} more` : ''})` : ''}</p>`
         : h`<ul class="wire-items">${items.map((i) => h`<li>${wireLink(i)} <span class="meta">${i.outlet ? h`${i.outlet} · ` : ''}${time(i.published_at)}</span></li>`)}</ul>`}
 </li>`;
@@ -79,9 +83,11 @@ function wireLink(i) {
 /** The front page's wire section: the latest clusters, one line each. */
 function wireSection(clusters) {
     if (!clusters.length) return '';
+    // The front page picks one cluster at a time on a phone (the owner's short-pages rule): each cluster carries the
+    // index its chip picks.
     return String(h`<section class="wire" id="wire" aria-labelledby="wire-h"><h2 id="wire-h">From the wire</h2>
 <p class="meta">${WIRE_NOTE}</p>
-<ol class="wire-list">${clusters.map((c) => wireCluster(c, { brief: true }))}</ol>
+<ol class="wire-list pick-list">${clusters.map((c, i) => wireCluster(c, { brief: true, i }))}</ol>
 <p><a href="/wire">The whole wire</a></p></section>`);
 }
 
