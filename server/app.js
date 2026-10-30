@@ -61,7 +61,6 @@ async function createApp(opts = {}) {
     // PostgreSQL (ADR-035): opened and migrated here unless the caller (a test, a script) hands in a store.
     const store = opts.store || await openStore(config, { now: opts.now, log });
     const accountData = opts.accountData || accountDataLib.create({ db: store.db, log });
-    await accountData.ensureSchema();
     const accountSend = opts.accountSend || (config.oauth.clientSecret ? createNetworkSender({
         networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl,
     }) : null);
