@@ -40,6 +40,8 @@ const { createEditorRoutes } = require('./http/editor');
 const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
 const { createEvents } = require('./http/events');
+const accountDataLib = require('./account-data');
+const { createNetworkSender } = require('openvibe-sdk/account-data');
 const { createActorLimits } = require('./http/actor-limits');
 const { createNewsReadiness } = require('./observability');
 const { createWorker } = require('./worker');
@@ -58,6 +60,11 @@ async function createApp(opts = {}) {
     const fetchImpl = opts.fetchImpl || globalThis.fetch;
     // PostgreSQL (ADR-035): opened and migrated here unless the caller (a test, a script) hands in a store.
     const store = opts.store || await openStore(config, { now: opts.now, log });
+    const accountData = opts.accountData || accountDataLib.create({ db: store.db, log });
+    await accountData.ensureSchema();
+    const accountSend = opts.accountSend || (config.oauth.clientSecret ? createNetworkSender({
+        networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, fetch: fetchImpl,
+    }) : null);
 
     const outbox = createServiceOutbox({
         db: store.db, source: 'news',
@@ -101,7 +108,7 @@ async function createApp(opts = {}) {
     const briefs = createBriefs({ store, ai: config.briefs.enabled ? ai : null, log });
     const worker = createWorker({ config, ingest, outbox, briefs, log });
 
-    const ctx = { config, store, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow, briefs };
+    const ctx = { config, store, accountData, accountSend, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow, briefs };
 
     const app = express();
     app.disable('x-powered-by');
@@ -158,7 +165,7 @@ async function createApp(opts = {}) {
     if (indexnow.enabled) app.use(indexnow.keyFile);
 
     // ── Events webhook (raw body; before any other body parser) ─
-    app.use(createEvents({ config, store, ingest, sources, log }));
+    app.use(createEvents({ config, store, ingest, sources, log , accountData, accountSend }));
 
     app.use(cookieParser());
 
