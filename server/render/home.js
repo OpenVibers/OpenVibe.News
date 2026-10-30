@@ -106,7 +106,7 @@ ${item ? h`<p class="nh-latest">${href ? h`<a href="${href}" rel="nofollow noope
 ${outlets.length ? raw(foldBlock({
         id: 'outlets',
         head: '<h2 id="nh-outlets-h">The sources we read</h2>',
-        html: h`<section class="sc-sec nh-sec" aria-labelledby="nh-outlets-h"><h2 id="nh-outlets-h">The sources we read</h2>
+        html: h`<section class="sc-sec nh-sec" aria-labelledby="nh-outlets-h"><h2>The sources we read</h2>
 <p class="sc-lede">Public feeds, collected by OpenVibe.Sources with each publisher's terms and robots.txt checked. Headlines, links and short summaries only.</p>
 <ul class="nh-outlets">${outlets.map((x) => h`<li><b>${x.outlet}</b><span class="nh-count">${plural(x.week, 'report')} this week · ${num(x.month)} in 30 days</span>${x.latest ? h`<span class="nh-latest">Newest: ${httpHref(x.latest.url) ? h`<a href="${httpHref(x.latest.url)}" rel="nofollow noopener" target="_blank">${x.latest.headline}</a>` : x.latest.headline}</span>` : ''}</li>`)}</ul></section>`,
     })) : ''}
@@ -130,7 +130,7 @@ ${raw(showcase.steps({
 ${raw(foldBlock({
         id: 'faq',
         head: '<h2 id="nh-faq-h">Questions</h2>',
-        html: h`<section class="sc-sec nh-sec nh-faq" aria-labelledby="nh-faq-h"><h2 id="nh-faq-h">Questions</h2>${questions.map((f) => h`<details><summary>${f.q}</summary><p>${f.a}</p></details>`)}</section>`,
+        html: h`<section class="sc-sec nh-sec nh-faq" aria-labelledby="nh-faq-h"><h2>Questions</h2>${questions.map((f) => h`<details><summary>${f.q}</summary><p>${f.a}</p></details>`)}</section>`,
     }))}`);
 }
 
