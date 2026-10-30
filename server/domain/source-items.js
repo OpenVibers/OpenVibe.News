@@ -31,6 +31,13 @@ const { ids } = require('openvibe-contracts');
 const { createChangeCursor, pullChanges, normalize } = require('openvibe-publishing/ingest');
 
 const NEAR_TITLE = { anyOutlet: 0.9, sameOutlet: 0.75, windowMs: 48 * 3600 * 1000 };
+// The agency behind a government feed: the outlet a reader sees for an item of that source, even before the Sources
+// registry has taught News the source's own name. An item of another source keeps the name it learned.
+const AGENCIES = Object.freeze({
+    'sec-press': 'US Securities and Exchange Commission',
+    'doj-news': 'US Department of Justice',
+    'dol-news': 'US Department of Labor',
+});
 // Only an http(s) URL is kept as an item's link: a publisher's javascript: or data: URL would become a link on a page.
 const httpUrl = (u) => { try { const x = new URL(String(u || '')); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href : null; } catch { return null; } };
 const newItemId = (now) => `nsi_${ids.ulid(now)}`;
@@ -74,7 +81,7 @@ function createIngest({ store, config, clusters, outbox, sources, discussion = n
 
     async function outletFor(item) {
         const st = await q.status.get(item.source_key);
-        return (st && st.name) || normalize.hostOf(item.canonical_url) || item.source_key;
+        return AGENCIES[item.source_key] || (st && st.name) || normalize.hostOf(item.canonical_url) || item.source_key;
     }
 
     /** The fields News keeps from a Sources item. Nothing else of the item is read. */
