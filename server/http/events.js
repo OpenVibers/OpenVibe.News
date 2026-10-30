@@ -17,11 +17,12 @@
 const express = require('express');
 const { http } = require('openvibe-contracts');
 const { createEventConsumer } = require('openvibe-publishing/ingest');
+const { TOPICS: ACCOUNT_TOPICS } = require('openvibe-sdk/account-data');
 
 const CONSUMER = 'news-sources';
 const EVT_RE = /^evt_[0-9A-HJKMNP-TV-Z]{26}$/;
 
-function createEvents({ config, store, ingest, sources, log = console }) {
+function createEvents({ config, store, ingest, sources, accountData = null, accountSend = null, log = console }) {
     const router = express.Router();
     const consumer = createEventConsumer({ db: store.db, secrets: config.events.webhookSecrets, consumer: CONSUMER, now: store.now });
     const { inbox, verify } = consumer;
@@ -40,6 +41,15 @@ function createEvents({ config, store, ingest, sources, log = console }) {
         }
         const attempt = Number(req.get('x-openvibe-delivery-attempt')) || 1;
         const type = String(event.event_type || '');
+        if (accountData && ACCOUNT_TOPICS.includes(type)) {
+            try {
+                const outcome = await accountData.apply(event, { send: accountSend });
+                return res.status(200).json({ event_id: event.event_id, outcome });
+            } catch (err) {
+                log.warn('[News] account-data delivery failed:', err && err.message ? err.message : err);
+                return http.sendProblem(res, 503, 'news.account_retry', { detail: 'not applied; Events will retry', ctx });
+            }
+        }
         const p = event.payload && typeof event.payload === 'object' ? event.payload : {};
         const fromSources = event.source === 'sources';
 

@@ -8,6 +8,7 @@
 const { createApp } = require('./app');
 const { gracefulStop } = require('openvibe-sdk/service');
 const { startTelemetryRetention } = require('openvibe-sdk/telemetry');
+const { startSubscriptions } = require('openvibe-sdk/account-data');
 
 /**
  * The process stop (openvibe-sdk/service, docs/service.md's 5 s family): the Sources pull worker stops
@@ -15,11 +16,11 @@ const { startTelemetryRetention } = require('openvibe-sdk/telemetry');
  * closes; past the deadline the process exits 0, as the hand-rolled 5 s timer did. Exported so a test
  * can inject `exit` and `signals: false`.
  */
-function createLifecycle({ server, ctx, exit, signals }) {
+function createLifecycle({ server, ctx, exit, signals, extra = [] }) {
     return gracefulStop({
         name: 'News', server, deadlineExitCode: 0, exit, signals,
         stop: [() => ctx.worker.stop()],
-        close: [() => ctx.outbox.stop(), async () => { clearInterval(ctx.telemetryTick); if (ctx.retention) await ctx.retention.stop(); if (ctx.telemetry) await ctx.telemetry.stop(); }, () => ctx.store.close()],
+        close: [...extra, () => ctx.outbox.stop(), async () => { clearInterval(ctx.telemetryTick); if (ctx.retention) await ctx.retention.stop(); if (ctx.telemetry) await ctx.telemetry.stop(); }, () => ctx.store.close()],
     });
 }
 
@@ -41,7 +42,14 @@ async function start() {
     ctx.telemetryTick = setInterval(() => { ctx.telemetry.flush().catch(() => {}); }, 60_000);
     ctx.telemetryTick.unref();
 
-    createLifecycle({ server, ctx });
+    let accountSubscription = null;
+    if (config.events.webhookSecrets.length && config.events.url && config.oauth.clientSecret) {
+        accountSubscription = startSubscriptions({
+            eventsUrl: config.events.url, endpoint: `http://127.0.0.1:${config.port}/internal/events`, secret: config.events.webhookSecrets[0],
+            networkInternalUrl: config.networkInternalUrl, clientId: config.oauth.clientId, clientSecret: config.oauth.clientSecret, log: console,
+        });
+    }
+    createLifecycle({ server, ctx, extra: [() => { if (accountSubscription) accountSubscription.stop(); }] });
     return { server, ctx };
 }
 
