@@ -36,9 +36,9 @@ const ld = (text) => [...text.matchAll(/<script type="application\/ld\+json">([\
         await check('the wire, the topics with what was reported on them, the outlets with their newest report', async () => {
             const text = home.text;
             assert.ok(text.includes('From the wire') && text.includes('Europa Clipper'));
-            const space = (/<li><h3><a href="\/topics\/space">Space<\/a><\/h3>[\s\S]*?<\/li>/.exec(text) || [''])[0];
+            const space = (/<li[^>]*><h3><a href="\/topics\/space">Space<\/a><\/h3>[\s\S]*?<\/li>/.exec(text) || [''])[0];
             assert.match(space, /1 subject, 3 reports/);
-            const science = (/<li><h3><a href="\/topics\/science">Science<\/a><\/h3>[\s\S]*?<\/li>/.exec(text) || [''])[0];
+            const science = (/<li[^>]*><h3><a href="\/topics\/science">Science<\/a><\/h3>[\s\S]*?<\/li>/.exec(text) || [''])[0];
             assert.ok(science.includes('New chip-based tape measure for light'), 'NIST places its reports in Science');
             assert.ok(text.includes('<b>NIST news</b>') && text.includes('<b>Wire A</b>'));
             assert.match(text, /<b>Wire A<\/b><span class="nh-count">1 report this week · 1 in 30 days<\/span>/);

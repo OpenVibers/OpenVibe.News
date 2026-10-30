@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const layout = require('openvibe-publishing/layout');
 const frame = require('openvibe-shared/frame');
+const { foldBlock } = require('./short');
 
 const NETWORK_URL = 'https://openvibe.network';
 const SITE_NAME = 'OpenVibe.News';
@@ -108,11 +109,19 @@ function renderPage(o) {
         styles: o.styles,   // openvibe-shared stylesheet names (the home page's showcase.css)
         // This service's own extra stylesheets for one kind of page (the briefs and live pages' css/briefs.css)
         // and the discovery tags of the page's Markdown twin (public.js's send adds both together).
-        head: [...(o.localStyles || []).map((rel) => `<link rel="stylesheet" href="${asset(rel)}">`), o.head].filter(Boolean).join('\n'),
+        // The rules that show the picked item of a pick list are written for the page, because there is one per item.
+        head: [...(o.localStyles || []).map((rel) => `<link rel="stylesheet" href="${asset(rel)}">`), o.head]
+            .concat((o.inlineStyles || []).map((css) => `<style>${css}</style>`)).filter(Boolean).join('\n'),
+
         release: RELEASE,
         account,
         body: o.body,
-        shipped: o.path === '/' ? frame.shipped({ service: 'news', title: `Recently shipped on ${SITE_NAME}` }) : '',
+        // The shipped list is a part a reader rarely needs: a fold on a phone, the section it was where there is room.
+        shipped: o.path === '/' ? foldBlock({
+            id: 'shipped',
+            head: `<h2 id="h-shipped">Recently shipped on ${SITE_NAME}</h2>`,
+            html: frame.shipped({ service: 'news', title: `Recently shipped on ${SITE_NAME}` }),
+        }) : '',
         bodyClass: o.bodyClass,
     });
 }
