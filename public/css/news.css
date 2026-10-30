@@ -132,3 +132,21 @@ body.news-home .page { max-width: 1120px; }
   .nh-wire .wire-list > li:nth-child(n+5) { display: none; }
   .nh-topics > li:nth-child(n+7) { display: none; }
 }
+
+/* Touch targets on phones (fleet audit, 2026-10-29): touch pointers only. */
+@media (pointer: coarse) {
+  .nh-faq summary { min-height: 44px; }
+  .nh-topics a { position: relative; display: inline-block; }
+  .nh-topics a::after { content: ''; position: absolute; left: 0; right: 0; top: -12px; bottom: -12px; }
+  .nh-latest a { position: relative; display: inline-block; }
+  .nh-latest a::after { content: ''; position: absolute; left: 0; right: 0; top: -3px; bottom: -3px; }
+  .nh-more a:only-child { position: relative; display: inline-block; }
+  .nh-more a:only-child::after { content: ''; position: absolute; left: 0; right: 0; top: -12px; bottom: -12px; }
+  .nh-live a { position: relative; display: inline-block; }
+  .nh-live a::after { content: ''; position: absolute; left: 0; right: 0; top: -13px; bottom: -13px; }
+  .nh-card h3 a { display: inline-block; min-height: 44px; }
+  .wire-lead a { position: relative; display: inline-block; }
+  .wire-lead a::after { content: ''; position: absolute; left: 0; right: 0; top: -12px; bottom: -12px; }
+  section.wire > a { position: relative; display: inline-block; }
+  section.wire > a::after { content: ''; position: absolute; left: 0; right: 0; top: -12px; bottom: -12px; }
+}
