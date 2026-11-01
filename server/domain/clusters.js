@@ -254,7 +254,10 @@ function createClusters({ store, config, outbox }) {
         async wire({ limit = 30 } = {}) {
             const out = [];
             for (const c of await api.recent({ limit: limit * 2 })) {
-                const items = (await q.members.all(c.id)).filter((i) => i.status === 'active' && !i.removed_at && i.canonical_url)
+                const skewMs = 24 * 3_600_000;
+            const cutoff = store.now() + skewMs;
+            const items = (await q.members.all(c.id)).filter((i) => i.status === 'active' && !i.removed_at && i.canonical_url)
+                    .filter((i) => !i.published_at || Date.parse(i.published_at) <= cutoff)
                     .map((i) => ({ id: i.id, headline: i.headline, url: i.canonical_url, outlet: i.outlet, published_at: i.published_at }));
                 if (!items.length) continue;
                 items.sort((a, b) => String(b.published_at || '').localeCompare(String(a.published_at || '')));
@@ -275,7 +278,10 @@ function createClusters({ store, config, outbox }) {
                 WHERE c.status = 'open' AND c.window_end >= ? AND i.status = 'active' AND i.removed_at IS NULL
                 ORDER BY c.window_end DESC, c.id DESC`).all(since);
             const byCluster = new Map();
+            const skewMs = 24 * 3_600_000;
+            const cutoff = store.now() + skewMs;
             for (const r of rows) {
+                if (r.published_at && Date.parse(r.published_at) > cutoff) continue;
                 if (!byCluster.has(r.cid)) byCluster.set(r.cid, { id: r.cid, label: r.label, updated: r.window_end, items: [], sources: new Set() });
                 const c = byCluster.get(r.cid);
                 c.sources.add(r.source_key);

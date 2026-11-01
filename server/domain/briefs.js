@@ -36,7 +36,7 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
     const db = store.db;
     const q = {
         cluster: db.prepare("SELECT * FROM news_story_clusters WHERE id = ? AND status = 'open'"),
-        reports: db.prepare("SELECT * FROM news_source_items WHERE cluster_id = ? AND status = 'active' AND removed_at IS NULL ORDER BY published_at, first_seen_at, seq"),
+        reports: db.prepare("SELECT * FROM news_source_items WHERE cluster_id = ? AND status = 'active' AND removed_at IS NULL AND (published_at IS NULL OR published_at <= ?) ORDER BY published_at, first_seen_at, seq"),
         get: db.prepare('SELECT * FROM news_cluster_briefs WHERE cluster_id = ? AND kind = ? AND tone = ?'),
         put: db.prepare(`INSERT INTO news_cluster_briefs (cluster_id, kind, tone, headline, paragraphs, source_ids, gaps, run_id, model, stub, item_count, cluster_updated_at, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -49,7 +49,7 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
              WHERE b.kind = 'summary' AND b.tone = 'neutral' AND b.stub = false AND c.status = 'open') x
             WHERE x.outlets >= ? ORDER BY x.window_end DESC, x.created_at DESC LIMIT ?`),
         // Open clusters active in the window with at least MIN_REPORTS live reports, newest activity first.
-        due: db.prepare(`SELECT c.id, c.updated_at, count(i.id) AS n FROM news_story_clusters c JOIN news_source_items i ON i.cluster_id = c.id AND i.status = 'active' AND i.removed_at IS NULL
+        due: db.prepare(`SELECT c.id, c.updated_at, count(i.id) AS n FROM news_story_clusters c JOIN news_source_items i ON i.cluster_id = c.id AND i.status = 'active' AND i.removed_at IS NULL AND (i.published_at IS NULL OR i.published_at <= ?)
             WHERE c.status = 'open' AND c.window_end >= ? GROUP BY c.id, c.updated_at, c.window_end HAVING count(i.id) >= ? AND count(DISTINCT i.outlet) >= ? ORDER BY c.window_end DESC LIMIT 200`),
     };
 
@@ -59,7 +59,8 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
     async function get(clusterId, { kind = 'summary', tone = 'neutral' } = {}) {
         const cluster = await q.cluster.get(clusterId);
         if (!cluster) return null;
-        const reports = await q.reports.all(cluster.id);
+        const cutoff = new Date(store.now() + 24 * 3_600_000).toISOString();
+        const reports = await q.reports.all(cluster.id, cutoff);
         const row = await q.get.get(cluster.id, kind, tone);
         const outlets = new Set(reports.map((r) => r.outlet)).size;
         return { cluster, reports, brief: row ? shape(row) : null, fresh: fresh(row, cluster, reports.length), outlets, enough: outlets >= MIN_OUTLETS, minOutlets: MIN_OUTLETS };
@@ -79,7 +80,8 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
         if (!KINDS.includes(kind) || !TONES.includes(tone)) throw Object.assign(new Error('kind or tone not known'), { code: 'brief.invalid', status: 422 });
         const cluster = await q.cluster.get(clusterId);
         if (!cluster) throw Object.assign(new Error('No such cluster'), { code: 'cluster.not_found', status: 404 });
-        const reports = await q.reports.all(cluster.id);
+        const cutoff = new Date(store.now() + 24 * 3_600_000).toISOString();
+        const reports = await q.reports.all(cluster.id, cutoff);
         if (!reports.length) throw Object.assign(new Error('This cluster has no live reports'), { code: 'brief.no_reports', status: 422 });
         const outlets = new Set(reports.map((r) => r.outlet));
         if (kind === 'summary' && outlets.size < MIN_OUTLETS) throw Object.assign(new Error(`Only ${outlets.size === 1 ? 'one outlet has' : `${outlets.size} outlets have`} reported this; a summary needs ${MIN_OUTLETS}`), { code: 'brief.too_few_outlets', status: 422 });
@@ -102,7 +104,8 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
     async function sweep({ limit = SWEEP_PER_TICK } = {}) {
         if (!ai || !ai.enabled) return 0;
         let made = 0;
-        for (const c of await q.due.all(store.now() - SWEEP_WINDOW_MS, MIN_REPORTS, MIN_OUTLETS)) {
+        const cutoff = new Date(store.now() + 24 * 3_600_000).toISOString();
+        for (const c of await q.due.all(cutoff, store.now() - SWEEP_WINDOW_MS, MIN_REPORTS, MIN_OUTLETS)) {
             if (made >= limit) break;
             const row = await q.get.get(c.id, 'summary', 'neutral');
             if (fresh(row, c, Number(c.n))) continue;
