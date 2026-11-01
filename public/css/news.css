@@ -188,3 +188,8 @@ body.news-home .page { max-width: 1120px; }
   .nh-fold-block .sc-sec { margin: 0; padding: 0; }
 }
 @media (max-width: 640px) { .nh-fold-block { margin-top: 24px; } }
+
+/* A brief's sources on a narrow phone: long report titles break, and the table scrolls inside itself rather than
+   pushing the page wider (it ran 39 px past a 320 px screen; 2026-11-01). */
+table.sources td { overflow-wrap: anywhere; }
+@media (max-width: 480px) { table.brief-sources { display: block; max-width: 100%; overflow-x: auto; } }
