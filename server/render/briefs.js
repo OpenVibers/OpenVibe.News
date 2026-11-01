@@ -32,15 +32,32 @@ function makeButton(clusterId, { kind, tone, label }) {
     return h`<form class="brief-make" method="post" action="/briefs/${clusterId}/make"><input type="hidden" name="kind" value="${kind}"><input type="hidden" name="tone" value="${tone}"><button type="submit">${label}</button></form>`;
 }
 
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** "3 reports by 2 outlets: Reuters, AP" — how many covered it, and who (market outcome 2). */
+const coverage = (reports, outlets) => `${plural(reports.length, 'report')} by ${plural(outlets.length, 'outlet')}${outlets.length ? `: ${outlets.slice(0, 6).join(', ')}${outlets.length > 6 ? ` and ${outlets.length - 6} more` : ''}` : ''}`;
+
+/**
+ * A story fewer outlets than the threshold have covered: the reports, and why there is no summary (market outcome 4).
+ * One outlet's three reports are one outlet's account; a summary of it would read as more than it is.
+ */
+function reportsOnlyPage({ cluster, reports, outlets, minOutlets }) {
+    return String(h`<header class="site-header"><p class="eyebrow"><span class="badge badge-reports">Reports</span> ${coverage(reports, outlets)}</p>
+<h1>${cluster.label}</h1>
+<p class="meta brief-held">No AI summary: ${outlets.length === 1 ? 'only one outlet has' : `only ${outlets.length} outlets have`} reported this, and we write one only once ${minOutlets} independent outlets have. Until then, here is what was reported, as each outlet put it.</p></header>
+<section aria-labelledby="reports-h"><h2 id="reports-h">The reports</h2>${sourceTable(reports)}</section>
+<p class="meta"><a href="/briefs">All AI briefs</a> · <a href="/live">Live</a> · <a href="/wire">The wire</a></p>`);
+}
+
 /** /briefs/:id */
-function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake, notice = null }) {
+function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake, notice = null, enough = true, minOutlets = 2 }) {
     const outlets = [...new Set(reports.map((r) => r.outlet))];
+    if (!enough) return reportsOnlyPage({ cluster, reports, outlets, minOutlets });
     const shown = brief && !brief.stub ? brief : null;
     const tabs = h`<nav class="brief-tones" aria-label="How to tell it">${TONES.map(([t, label]) => (t === tone
         ? h`<span class="brief-tone on" aria-current="page">${label}</span>`
         : h`<a class="brief-tone" href="/briefs/${cluster.id}${t === 'neutral' ? '' : `?tone=${t}`}">${label}</a>`))}</nav>`;
     const persp = perspectives && !perspectives.stub ? perspectives : null;
-    return String(h`<header class="site-header"><p class="eyebrow"><span class="badge badge-ai">AI brief</span> from ${reports.length} ${reports.length === 1 ? 'report' : 'reports'}${outlets.length ? h` (${outlets.slice(0, 5).join(', ')}${outlets.length > 5 ? ` and ${outlets.length - 5} more` : ''})` : ''}</p>
+    return String(h`<header class="site-header"><p class="eyebrow"><span class="badge badge-ai">AI brief</span> from ${coverage(reports, outlets)}</p>
 <h1>${shown && shown.headline ? shown.headline : cluster.label}</h1>
 <p class="meta">${AI_NOTE}</p></header>
 ${notice ? h`<p class="notice">${notice}</p>` : ''}
@@ -61,8 +78,8 @@ ${shown && shown.gaps.length ? h`<details class="brief-gaps"><summary>What the A
 function briefsIndex({ briefs }) {
     return String(h`<header class="site-header"><h1>AI briefs</h1><p class="lede">What the reports on a subject say, summarized by OpenVibe.AI with every paragraph linked to its reports, and labelled as AI. Editors' stories are on <a href="/">the front page</a>.</p></header>
 ${briefs.length ? h`<ol class="story-list">${briefs.map((b) => h`<li class="story-item"><h2 class="story-item-title"><a href="/briefs/${b.cluster_id}">${b.headline || b.label}</a> <span class="badge badge-ai">AI</span></h2>
-<p class="meta">${time(b.window_end)} · from ${b.item_count} reports</p>${b.paragraphs[0] ? h`<p class="summary">${b.paragraphs[0].text.slice(0, 280)}${b.paragraphs[0].text.length > 280 ? '…' : ''}</p>` : ''}</li>`)}</ol>`
-        : h`<p class="empty">No briefs yet. They are written as reports on a subject come in from two or more of the sources.</p>`}`);
+<p class="meta">${time(b.window_end)} · from ${b.item_count} reports${b.outlets ? ` by ${b.outlets} outlets` : ''}</p>${b.paragraphs[0] ? h`<p class="summary">${b.paragraphs[0].text.slice(0, 280)}${b.paragraphs[0].text.length > 280 ? '…' : ''}</p>` : ''}</li>`)}</ol>`
+        : h`<p class="empty">No briefs yet. One is written once two or more independent outlets have reported a subject.</p>`}`);
 }
 
 /** /live: the newest reports as they arrive, grouped, with what is breaking. */

@@ -5,7 +5,7 @@
  * more reports; every paragraph cites its reports and uncited claims are dropped; the page labels it as AI, is never
  * indexed, and shows the reports; a reader's POST asks for another tone or the outlets' comparison (same-origin only);
  * a stub provider's output is never shown; a changed cluster's brief is stale and made again; /live refreshes itself
- * and marks what is breaking.
+ * and marks what is breaking. Below two independent outlets nothing is summarized: the page lists the reports and says why.
  */
 const assert = require('assert');
 const { boot, check, done, launchReports } = require('./helpers/boot');
@@ -89,6 +89,25 @@ const SAME = { 'sec-fetch-site': 'same-origin' };
             assert.ok(r.text.includes(`/briefs/${clusterId}`) && r.text.includes('noindex'));
             const home = await t.get('/');
             assert.ok(home.text.includes('href="/live"') && home.text.includes('href="/briefs"'), 'in the navigation');
+        });
+        await check('one outlet is not enough: no summary is written, made or shown; the reports are, with why (market outcome 4)', async () => {
+            // The same story, now reported by one outlet only.
+            await t.db().prepare("UPDATE news_source_items SET outlet = 'GOV.UK' WHERE cluster_id = ?").run(clusterId);
+            const got = await t.ctx.briefs.get(clusterId);
+            assert.deepStrictEqual([got.outlets, got.enough, got.minOutlets], [1, false, 2]);
+            const r = await t.get(`/briefs/${clusterId}`);
+            assert.strictEqual(r.status, 200);
+            assert.match(r.text, /<span class="badge badge-reports">Reports<\/span> \d+ reports by 1 outlet: GOV\.UK/);
+            assert.match(r.text, /No AI summary: only one outlet has reported this, and we write one only once 2 independent outlets have\./);
+            assert.ok(!r.text.includes('Europa Clipper is on its way') && !r.text.includes('Written by OpenVibe.AI'), 'the stored summary is not shown');
+            assert.ok(r.text.includes('id="source-1"'), 'the reports are');
+            assert.ok(!r.text.includes('Write it with AI'), 'and nobody is offered to make one');
+            assert.ok(!(await t.get('/briefs')).text.includes(`/briefs/${clusterId}`), 'not listed among the briefs');
+            const before = t.ai.requests.length;
+            await assert.rejects(() => t.ctx.briefs.make(clusterId, { kind: 'summary', tone: 'brief' }), (e) => e.code === 'brief.too_few_outlets' && e.status === 422);
+            await t.db().prepare('UPDATE news_story_clusters SET updated_at = updated_at + 1 WHERE id = ?').run(clusterId);
+            assert.strictEqual(await t.ctx.briefs.sweep(), 0, 'the sweep does not ask AI about it');
+            assert.strictEqual(t.ai.requests.length, before, 'AI was never asked');
         });
     } finally { await t.close(); }
     done();

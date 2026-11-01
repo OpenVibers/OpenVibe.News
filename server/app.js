@@ -104,7 +104,7 @@ async function createApp(opts = {}) {
         secureCookies: config.cookies.secure,
     });
     const viewers = createViewerResolver({ auth, config, people });
-    const briefs = createBriefs({ store, ai: config.briefs.enabled ? ai : null, log });
+    const briefs = createBriefs({ store, ai: config.briefs.enabled ? ai : null, log, minOutlets: config.indexing && config.indexing.minIndependentSources });
     const worker = createWorker({ config, ingest, outbox, briefs, log });
 
     const ctx = { config, store, accountData, accountSend, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow, briefs };

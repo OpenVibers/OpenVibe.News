@@ -10,6 +10,10 @@
  *                  for every cluster with at least MIN_REPORTS reports) or explained (made when a reader asks)
  *   perspectives   news.compare_perspectives: how the outlets frame it (when a reader asks; two outlets or more)
  *
+ * Below minOutlets independent outlets (the market research's lesson from Ground News: withhold the summary when too
+ * few distinct outlets covered a story) no summary is written, made or shown: the page lists the reports and says why.
+ * It is the same number that decides whether a story may be indexed (config.indexing.minIndependentSources).
+ *
  * Only News' stored fields go to AI (headline, outlet, date, URL, and the short summary its terms allow). A paragraph the
  * model did not cite is dropped (clients/ai.js draftFromOutput) and listed as a gap; a run with no cited text makes no
  * brief. The stub provider's synthetic output is stored but never shown. A brief made from a cluster that has since
@@ -27,7 +31,8 @@ const SWEEP_WINDOW_MS = 72 * 3_600_000;
 
 const parse = (v, d) => { try { return typeof v === 'string' ? JSON.parse(v) : (v == null ? d : v); } catch { return d; } };
 
-function createBriefs({ store, ai, log = console }) {
+function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
+    const MIN_OUTLETS = Math.max(1, Number(minOutlets) || 2);
     const db = store.db;
     const q = {
         cluster: db.prepare("SELECT * FROM news_story_clusters WHERE id = ? AND status = 'open'"),
@@ -38,11 +43,14 @@ function createBriefs({ store, ai, log = console }) {
             ON CONFLICT (cluster_id, kind, tone) DO UPDATE SET headline = excluded.headline, paragraphs = excluded.paragraphs, source_ids = excluded.source_ids,
                 gaps = excluded.gaps, run_id = excluded.run_id, model = excluded.model, stub = excluded.stub, item_count = excluded.item_count,
                 cluster_updated_at = excluded.cluster_updated_at, created_at = excluded.created_at`),
-        latest: db.prepare(`SELECT b.*, c.label, c.window_end FROM news_cluster_briefs b JOIN news_story_clusters c ON c.id = b.cluster_id
-            WHERE b.kind = 'summary' AND b.tone = 'neutral' AND b.stub = false AND c.status = 'open' ORDER BY c.window_end DESC, b.created_at DESC LIMIT ?`),
+        latest: db.prepare(`SELECT * FROM (SELECT b.*, c.label, c.window_end,
+                (SELECT count(DISTINCT i.outlet) FROM news_source_items i WHERE i.cluster_id = c.id AND i.status = 'active' AND i.removed_at IS NULL) AS outlets
+              FROM news_cluster_briefs b JOIN news_story_clusters c ON c.id = b.cluster_id
+             WHERE b.kind = 'summary' AND b.tone = 'neutral' AND b.stub = false AND c.status = 'open') x
+            WHERE x.outlets >= ? ORDER BY x.window_end DESC, x.created_at DESC LIMIT ?`),
         // Open clusters active in the window with at least MIN_REPORTS live reports, newest activity first.
         due: db.prepare(`SELECT c.id, c.updated_at, count(i.id) AS n FROM news_story_clusters c JOIN news_source_items i ON i.cluster_id = c.id AND i.status = 'active' AND i.removed_at IS NULL
-            WHERE c.status = 'open' AND c.window_end >= ? GROUP BY c.id, c.updated_at, c.window_end HAVING count(i.id) >= ? ORDER BY c.window_end DESC LIMIT 200`),
+            WHERE c.status = 'open' AND c.window_end >= ? GROUP BY c.id, c.updated_at, c.window_end HAVING count(i.id) >= ? AND count(DISTINCT i.outlet) >= ? ORDER BY c.window_end DESC LIMIT 200`),
     };
 
     const fresh = (row, cluster, n) => Boolean(row && Number(row.item_count) === n && Number(row.cluster_updated_at) === Number(cluster.updated_at));
@@ -53,7 +61,8 @@ function createBriefs({ store, ai, log = console }) {
         if (!cluster) return null;
         const reports = await q.reports.all(cluster.id);
         const row = await q.get.get(cluster.id, kind, tone);
-        return { cluster, reports, brief: row ? shape(row) : null, fresh: fresh(row, cluster, reports.length) };
+        const outlets = new Set(reports.map((r) => r.outlet)).size;
+        return { cluster, reports, brief: row ? shape(row) : null, fresh: fresh(row, cluster, reports.length), outlets, enough: outlets >= MIN_OUTLETS, minOutlets: MIN_OUTLETS };
     }
 
     function shape(row) {
@@ -73,6 +82,7 @@ function createBriefs({ store, ai, log = console }) {
         const reports = await q.reports.all(cluster.id);
         if (!reports.length) throw Object.assign(new Error('This cluster has no live reports'), { code: 'brief.no_reports', status: 422 });
         const outlets = new Set(reports.map((r) => r.outlet));
+        if (kind === 'summary' && outlets.size < MIN_OUTLETS) throw Object.assign(new Error(`Only ${outlets.size === 1 ? 'one outlet has' : `${outlets.size} outlets have`} reported this; a summary needs ${MIN_OUTLETS}`), { code: 'brief.too_few_outlets', status: 422 });
         if (kind === 'perspectives' && outlets.size < 2) throw Object.assign(new Error('Comparing how outlets frame it needs two outlets or more'), { code: 'brief.one_outlet', status: 422 });
         const workflow = kind === 'perspectives' ? 'news.compare_perspectives' : 'news.summarize_story';
         const result = await ai.run(workflow, {
@@ -92,7 +102,7 @@ function createBriefs({ store, ai, log = console }) {
     async function sweep({ limit = SWEEP_PER_TICK } = {}) {
         if (!ai || !ai.enabled) return 0;
         let made = 0;
-        for (const c of await q.due.all(store.now() - SWEEP_WINDOW_MS, MIN_REPORTS)) {
+        for (const c of await q.due.all(store.now() - SWEEP_WINDOW_MS, MIN_REPORTS, MIN_OUTLETS)) {
             if (made >= limit) break;
             const row = await q.get.get(c.id, 'summary', 'neutral');
             if (fresh(row, c, Number(c.n))) continue;
@@ -104,9 +114,9 @@ function createBriefs({ store, ai, log = console }) {
         return made;
     }
 
-    const latest = async (limit = 12) => (await q.latest.all(limit)).map((r) => ({ ...shape(r), label: r.label, window_end: Number(r.window_end) }));
+    const latest = async (limit = 12) => (await q.latest.all(MIN_OUTLETS, limit)).map((r) => ({ ...shape(r), label: r.label, window_end: Number(r.window_end), outlets: Number(r.outlets) }));
 
-    return { TONES, TONE_TEXT, KINDS, MIN_REPORTS, get, make, sweep, latest };
+    return { TONES, TONE_TEXT, KINDS, MIN_REPORTS, MIN_OUTLETS, get, make, sweep, latest };
 }
 
 module.exports = { createBriefs, TONES, TONE_TEXT, MIN_REPORTS };

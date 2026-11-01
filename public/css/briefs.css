@@ -15,3 +15,6 @@
 @keyframes live-pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 .wire-cluster.is-breaking { border-left: 3px solid #ef4444; padding-left: 10px; }
+/* A story too few outlets covered: its reports, and why there is no summary (market outcome 4) */
+.badge-reports { background: color-mix(in srgb, var(--text-primary, #e6edf7) 9%, transparent); color: var(--text-secondary, #96a7c2); }
+.brief-held { margin-top: 10px; padding: 10px 14px; border-left: 3px solid var(--warning, #f59e0b); border-radius: 0 10px 10px 0; background: color-mix(in srgb, var(--warning, #f59e0b) 8%, transparent); color: var(--text-secondary, #96a7c2); }
