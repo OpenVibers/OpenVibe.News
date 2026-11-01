@@ -44,7 +44,7 @@ function statsPanel(stats) {
 
 function briefCard(b, i) {
     const first = b.paragraphs[0] ? b.paragraphs[0].text : '';
-    return h`<li class="nh-card" data-i="${i}"><p class="nh-kicker"><span class="badge badge-ai">AI brief</span> from ${plural(b.item_count, 'report')}</p>
+    return h`<li class="nh-card" data-i="${i}"><p class="nh-kicker"><span class="badge badge-ai">AI brief</span> from ${plural(b.item_count, 'report')}${b.outlets ? ` by ${plural(b.outlets, 'outlet')}` : ''}</p>
 <h3><a href="/briefs/${b.cluster_id}">${b.headline || b.label}</a></h3><p class="meta">${time(b.window_end)}</p>${first ? h`<p class="nh-sum">${clip(first, 260)}</p>` : ''}</li>`;
 }
 

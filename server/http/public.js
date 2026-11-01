@@ -185,8 +185,8 @@ function createPublicRoutes(ctx) {
         const persp = await briefs.get(id, { kind: 'perspectives', tone: 'neutral' });
         const notice = req.query.made === '1' ? 'Written just now.' : (req.query.failed ? String(req.query.failed).slice(0, 200) : null);
         send(req, res, 200, {
-            title: `${got.brief && got.brief.headline ? got.brief.headline : got.cluster.label} (AI brief)`,
-            description: 'An AI summary of the reports on this subject, every paragraph linked to its reports.',
+            title: got.enough ? `${got.brief && got.brief.headline ? got.brief.headline : got.cluster.label} (AI brief)` : `${got.cluster.label} (reports)`,
+            description: got.enough ? 'An AI summary of the reports on this subject, every paragraph linked to its reports.' : 'The reports on this subject so far. Too few outlets have covered it for an AI summary.',
             decision: noindex(`/briefs/${id}`), canonical: `${config.baseUrl}/briefs/${id}`, localStyles: ['css/briefs.css'],
             body: briefPages.briefPage({ ...got, tone, perspectives: persp ? persp.brief : null, canMake: canMake(), notice }),
         }, { cacheable: !notice });
