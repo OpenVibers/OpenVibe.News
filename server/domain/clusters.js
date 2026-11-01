@@ -114,6 +114,9 @@ function createClusters({ store, config, outbox }) {
         insert: db.prepare(`INSERT INTO news_story_clusters (id, label, status, split_from, terms, entities, window_start, window_end, created_by, created_at, updated_at)
                             VALUES (@id, @label, 'open', @split_from, @terms, @entities, @window_start, @window_end, @created_by, @now, @now)`),
         members: db.prepare("SELECT * FROM news_source_items WHERE cluster_id = ? ORDER BY first_seen_at, seq"),
+        // The wire's members in one query for all its clusters; first_seen_at, seq keeps the stable order the sort relies on.
+        membersOfClusters: db.prepare(`SELECT cluster_id, id, headline, canonical_url, outlet, published_at, status, removed_at
+            FROM news_source_items WHERE cluster_id = ANY(?) ORDER BY cluster_id, first_seen_at, seq`),
         // The reports common words are counted from (itemTime is checked in JS: published_at is text).
         pool: db.prepare("SELECT id, source_key, headline, summary, published_at, first_seen_at, updated_at FROM news_source_items WHERE status NOT IN ('removed','duplicate') AND first_seen_at >= ? AND id <> ?"),
         sizes: db.prepare("SELECT cluster_id, count(*) AS n FROM news_source_items WHERE cluster_id = ANY(?) AND status <> 'removed' GROUP BY cluster_id"),
@@ -252,14 +255,25 @@ function createClusters({ store, config, outbox }) {
          * item are skipped. Only the fields the licensing rules let News store are read.
          */
         async wire({ limit = 30 } = {}) {
-            const out = [];
-            for (const c of await api.recent({ limit: limit * 2 })) {
-                const skewMs = 24 * 3_600_000;
+            const clusters = await api.recent({ limit: limit * 2 });
+            if (!clusters.length) return [];
+            // Every member of those clusters in one query: asking cluster by cluster was one round trip per cluster
+            // (up to 80) before the wire could render.
+            const ids = clusters.map((c) => c.id);
+            const rows = await q.membersOfClusters.all(ids);
+            const skewMs = 24 * 3_600_000;
             const cutoff = store.now() + skewMs;
-            const items = (await q.members.all(c.id)).filter((i) => i.status === 'active' && !i.removed_at && i.canonical_url)
-                    .filter((i) => !i.published_at || Date.parse(i.published_at) <= cutoff)
-                    .map((i) => ({ id: i.id, headline: i.headline, url: i.canonical_url, outlet: i.outlet, published_at: i.published_at }));
-                if (!items.length) continue;
+            const byCluster = new Map();
+            for (const i of rows) {
+                if (i.status !== 'active' || i.removed_at || !i.canonical_url) continue;
+                if (i.published_at && Date.parse(i.published_at) > cutoff) continue;
+                if (!byCluster.has(i.cluster_id)) byCluster.set(i.cluster_id, []);
+                byCluster.get(i.cluster_id).push({ id: i.id, headline: i.headline, url: i.canonical_url, outlet: i.outlet, published_at: i.published_at });
+            }
+            const out = [];
+            for (const c of clusters) {
+                const items = byCluster.get(c.id);
+                if (!items || !items.length) continue;
                 items.sort((a, b) => String(b.published_at || '').localeCompare(String(a.published_at || '')));
                 out.push({ id: c.id, label: c.label, updated: c.window_end, items });
                 if (out.length >= limit) break;
