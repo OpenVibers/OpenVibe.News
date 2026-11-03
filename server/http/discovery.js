@@ -82,17 +82,22 @@ function createDiscoveryRoutes(ctx) {
             name: 'OpenVibe.News',
             summary: SITE_SUMMARY,
             details: SITE_DETAILS,
+            markdown: true,
+            base: config.baseUrl,
             sections: [
                 { title: 'Start here', links: [
                     { title: 'Latest stories', url: abs('/') },
                     { title: 'Topics', url: abs('/topics') },
-                    { title: 'Sitemap', url: abs('/sitemap.xml') },
                 ] },
-                { title: 'Feeds', links: [
-                    { title: 'RSS', url: abs('/feed.xml') }, { title: 'Atom', url: abs('/atom.xml') }, { title: 'JSON Feed', url: abs('/feed.json') },
-                    { title: 'Per topic', url: abs('/topics'), note: 'each topic has /topics/<slug>/feed.xml, atom.xml and feed.json' },
-                ] },
-                { title: 'Data', links: [{ title: 'Story JSON', url: abs('/'), note: 'append .json to any story URL (/stories/<slug>.json)' }] },
+            ],
+            optional: [
+                { title: 'Sitemap', url: abs('/sitemap.xml') },
+                { title: 'RSS', url: abs('/feed.xml') },
+                { title: 'Atom', url: abs('/atom.xml') },
+                { title: 'JSON Feed', url: abs('/feed.json') },
+                { title: 'Per topic', url: abs('/topics'), note: 'each topic has /topics/<slug>/feed.xml, atom.xml and feed.json' },
+                { title: 'Story JSON', url: abs('/'), note: 'append .json to any story URL (/stories/<slug>.json)' },
+                { title: 'Full text for language models', url: abs('/llms-full.txt') },
             ],
         }));
     });

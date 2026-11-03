@@ -38,6 +38,8 @@ const { boot, check, done } = require('./helpers/boot');
         assert.match(llms, /^# OpenVibe\.News/);
         assert.match(llms, /not an automatic headline generator/);
         assert.match(llms, /\.json/);
+        assert.ok(llms.includes('(https://openvibe.news/index.md)'), 'home link points at its Markdown twin');
+        assert.ok(llms.includes('\n## Optional\n'), 'llms.txt has an Optional section');
         const full = await t.get('/llms-full.txt');
         assert.strictEqual(full.status, 200);
         assert.match(full.headers.get('content-type'), /^text\/plain/);
