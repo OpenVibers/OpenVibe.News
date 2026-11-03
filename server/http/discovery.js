@@ -94,9 +94,9 @@ function createDiscoveryRoutes(ctx) {
                 { title: 'Sitemap', url: abs('/sitemap.xml') },
                 { title: 'RSS', url: abs('/feed.xml') },
                 { title: 'Atom', url: abs('/atom.xml') },
-                { title: 'JSON Feed', url: abs('/feed.json') },
+                // A story as JSON is a note: a link to "/" would read as the home's Markdown twin (AGT-5 review).
+                { title: 'JSON Feed', url: abs('/feed.json'), note: 'any story as JSON: append .json to its URL (/stories/<slug>.json)' },
                 { title: 'Per topic', url: abs('/topics'), note: 'each topic has /topics/<slug>/feed.xml, atom.xml and feed.json' },
-                { title: 'Story JSON', url: abs('/'), note: 'append .json to any story URL (/stories/<slug>.json)' },
                 { title: 'Full text for language models', url: abs('/llms-full.txt') },
             ],
         }));
