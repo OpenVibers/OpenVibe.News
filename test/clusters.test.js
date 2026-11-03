@@ -111,6 +111,16 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.deepStrictEqual(audit, ['merge', 'reverse_merge', 'split', 'reverse_split']);
     });
 
+    await check('a label names each thing once (11-03: "department · doj · doj to monitor elections")', async () => {
+        const { labelOf, tidyLabel } = require('../server/domain/clusters');
+        assert.strictEqual(labelOf({ department: 9, doj: 8, 'doj to monitor elections': 7, justice: 3 }, {}), 'department · doj · justice', 'a name inside another is left out');
+        assert.strictEqual(labelOf({ 'ceconomy ag ceconomy': 5, ceconomy: 4, mediamarkt: 2 }, {}), 'ceconomy · mediamarkt', 'a name that repeats a word is left out');
+        assert.strictEqual(labelOf({}, { rail: 3, strike: 2, 'rail strike': 1 }), 'rail · strike', 'terms follow the same rule');
+        assert.strictEqual(labelOf({ 'new york': 3, york: 2, york2: 1 }, {}), 'new york · york2', 'whole words only: york2 is not york');
+        assert.strictEqual(tidyLabel('department · doj · doj to monitor elections'), 'department · doj', 'a stored label is shown tidy');
+        assert.strictEqual(tidyLabel('unlabelled'), 'unlabelled');
+    });
+
     await check('a cluster is matched on its core, not the union of its reports: it cannot snowball', async () => {
         const { compare, coreMin, signature } = require('../server/domain/clusters');
         assert.deepStrictEqual([1, 2, 3, 5, 6, 196].map(coreMin), [1, 1, 2, 2, 3, 66]);
