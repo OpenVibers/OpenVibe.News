@@ -9,7 +9,7 @@ const showcase = require('openvibe-shared/showcase');
 const { time, httpHref, storyList } = require('./pages');
 
 const { html: h, raw } = ssr;
-const { pickList, pickListRule, foldBlock } = require('./short');
+const { pickList, foldBlock } = require('./short');
 const num = (n) => Number(n || 0).toLocaleString('en-US');
 const plural = (n, one, many = `${one}s`) => `${num(n)} ${n === 1 ? one : many}`;
 const list = (xs) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);

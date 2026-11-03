@@ -2,6 +2,7 @@
 /**
  * The home on a phone (the owner's short-pages rule, 2026-10-30): one or two screens, app-like.
  *
+ *   pickList()   a list on the front page: a rail you swipe on a phone, every item shown (2026-10-31).
  *   pickBlock()  several blocks of the same kind, one at a time on a phone, picked with a row of chips. Radio
  *                inputs and :has(), no script: every block stays in the page for crawlers, and a wider screen (or a
  *                browser without :has()) shows them all and no chips.
@@ -15,26 +16,21 @@
 const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 /**
- * A pick list: a list of things of the same kind, one at a time on a phone, picked with a row of chips. The list
- * keeps its own markup and every item stays in the page; the caller marks each item with the index its chip picks.
+ * A list on the front page (the owner, 2026-10-31: never hide content to shorten a page). On a phone it is a rail you
+ * swipe, every item in it; a wider screen shows the list as before. It used to be one item at a time, picked with a
+ * row of radio chips, the rest display:none (21 items hidden on the 11-03 home). `labels` is kept for the callers and
+ * no longer drawn: the list's own heading names it.
  *
- *   pickList({ key, label, head, labels, html })   labels: the chip labels, in the order of the items
+ *   pickList({ key, label, head, labels, html })
  */
-function pickList({ key, label, head = '', labels, html }) {
+function pickList({ key, labels, html }) {
     if (!labels.length) return '';
-    const chips = labels.map((l, i) => `<input type="radio" name="pick-${esc(key)}" id="pk-${esc(key)}-${i}" value="${i}"${i === 0 ? ' checked' : ''}><label for="pk-${esc(key)}-${i}">${esc(l)}</label>`).join('');
-    return `<div class="pick" id="pick-${esc(key)}"><div class="pick-bar"><div class="pick-head"><h2>${esc(head || label)}</h2></div><div class="pick-row" role="radiogroup" aria-label="${esc(label)}">${chips}</div></div>${html}</div>`;
+    return `<div class="pick pick--rail" id="pick-${esc(key)}">${html}</div>`;
 }
 
-/** The rule that shows the picked item of a pick list: one per item, so the CSS is written for the page. */
-function pickListRule(key, i) {
-    return `.pick:has(#pk-${key}-${i}:checked) .pick-list>li[data-i="${i}"]{display:block}`;
-}
-
-/** The rules for every item of a pick list. */
-function pickListRules(key, n) {
-    return Array.from({ length: n }, (_, i) => pickListRule(key, i)).join('');
-}
+/** No longer needed (every item shows): kept so a caller that still asks for the rules gets none. */
+function pickListRule() { return ''; }
+function pickListRules() { return ''; }
 
 /**
  * A pick block. The panes are the page's own blocks; each one keeps its heading on a wide screen, and on a phone the

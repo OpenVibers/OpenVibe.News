@@ -1,8 +1,8 @@
 'use strict';
 /**
- * The home on a phone (the owner's short-pages rule, 2026-10-30): the home's lists of the same kind are one pick
- * block, a row of chips picks one of them, and the parts a reader rarely needs are folds. Radio inputs and :has(),
- * no script for the chips; every list stays in the page for crawlers; a wider screen shows them all and no chips.
+ * The home on a phone (the owner, 2026-10-31: never hide content to shorten a page): the home's lists are rails you
+ * swipe, every item shown, and the parts a reader rarely needs are folds. They used to be one item at a time behind a
+ * row of radio chips, the rest display:none.
  */
 const assert = require('assert');
 const { boot, check, done, launchReports } = require('./helpers/boot');
@@ -12,42 +12,36 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
     launchReports(t.sources);
     await t.pull();
     try {
-        await check('the home is one pick block: a chip per item, the first picked, every item in the page', async () => {
+        await check('the wire is a rail on a phone: every cluster shown, no chips, nothing hidden', async () => {
             const r = await t.get('/');
             assert.strictEqual(r.status, 200, r.text);
             const page = r.text;
-            const block = page.slice(page.indexOf('<div class="pick" id="pick-wire">'), page.indexOf('<div class="pick" id="pick-topics">'));
-            assert.ok(block.startsWith('<div class="pick" id="pick-wire">'), 'the pick block is on the home');
-            assert.match(block, /<div class="pick-row" role="radiogroup" aria-label="From the wire">/);
-            const chips = [...block.matchAll(/<input type="radio" name="pick-wire" id="pk-wire-(\d+)" value="\1"( checked)?><label for="pk-wire-\1">([^<]+)<\/label>/g)];
-            assert.ok(chips.length >= 1, `a chip per item (${chips.length})`);
-            assert.deepStrictEqual(chips.filter((m) => m[2]).map((m) => m[1]), [chips[0][1]], 'the first item is picked');
-            // Every cluster stays in the page, with the index its chip picks.
-            const clusters = [...block.matchAll(/<li class="wire-cluster" id="wire-[^"]+" data-i=(?:"|&quot;)?(\d+)/g)];
-            assert.strictEqual(clusters.length, chips.length, 'every cluster is in the page');
-            assert.deepStrictEqual(clusters.map((m) => m[1]), chips.map((m) => m[1]), 'each cluster knows its chip');
+            const block = page.slice(page.indexOf('<div class="pick pick--rail" id="pick-wire">'), page.indexOf('<div class="pick pick--rail" id="pick-topics">'));
+            assert.ok(block.startsWith('<div class="pick pick--rail" id="pick-wire">'), 'the wire rail is on the home');
+            assert.ok(!/type="radio"|pick-row/.test(block), 'no radio chips');
+            const clusters = [...block.matchAll(/<li class="wire-cluster" id="wire-[^"]+"/g)];
+            assert.ok(clusters.length >= 1, `every cluster is in the page (${clusters.length})`);
         });
 
-        await check('the topics are a pick block too: a chip per topic, every topic in the page', async () => {
+        await check('the topics are a rail too: every topic in the page, no chips', async () => {
             const r = await t.get('/');
             const page = r.text;
-            const block = page.slice(page.indexOf('<div class="pick" id="pick-topics">'), page.indexOf('<div class="pick" id="pick-topics">') + 4000);
-            const chips = [...block.matchAll(/<input type="radio" name="pick-topics" id="pk-topics-(\d+)" value="\1"( checked)?><label for="pk-topics-\1">([^<]+)<\/label>/g)];
-            assert.ok(chips.length >= 3, `a chip per topic (${chips.length})`);
-            assert.deepStrictEqual(chips.filter((m) => m[2]).map((m) => m[1]), [chips[0][1]], 'the first topic is picked');
+            const at = page.indexOf('<div class="pick pick--rail" id="pick-topics">');
+            assert.ok(at > 0, 'the topics rail is on the home');
+            const block = page.slice(at, at + 4000);
+            assert.ok(!/type="radio"/.test(block), 'no radio chips');
             const items = [...block.matchAll(/<li data-i=(?:"|&quot;)?(\d+)"?><h3><a href="\/topics\/[a-z-]+">/g)];
-            assert.strictEqual(items.length, chips.length, 'every topic stays in the page');
+            assert.ok(items.length >= 3, `every topic stays in the page (${items.length})`);
         });
 
-        await check('the CSS guard: the chips are hidden and the items all show until 640 px and where :has() is understood', async () => {
+        await check('the CSS: on a phone a list is a rail you swipe, and no rule hides an item (the owner, 2026-10-31)', async () => {
             const r = await t.get('/');
-            const page = r.text;
-            assert.match(page, /<style>@supports selector\(:has\(\*\)\)\{@media \(max-width:640px\)\{\.pick:has\(#pk-wire-0:checked\) \.pick-list>li\[data-i="0"\]\{display:block\}/, 'the rule that shows the picked item');
+            assert.ok(!/\.pick:has\(#pk-/.test(r.text), 'no per-item rule in the page');
             const css = require('fs').readFileSync(require('path').join(__dirname, '..', 'public', 'css', 'news.css'), 'utf8');
-            assert.match(css, /\.pick-row \{ display: none; \}/, 'the chips are hidden by default');
-            assert.match(css, /@supports selector\(:has\(\*\)\) \{ @media \(max-width: 640px\) \{/, 'the phone rules are under :has() and 640 px');
-            assert.match(css, /\.pick-row label \{[^}]*min-height: 44px/, 'a chip is a 44 px target');
-            assert.match(css, /\.pick \.pick-list > li \{ display: none; \}/, 'the items are hidden on a phone');
+            assert.match(css, /\.pick--rail \.pick-list \{ display: flex;[^}]*overflow-x: auto;[^}]*scroll-snap-type: x mandatory/, 'the list is a rail');
+            assert.match(css, /\.pick--rail \.pick-list > li \{ flex: 0 0 84%/, 'the next item peeks in');
+            assert.ok(!/pick-list > li \{ display: none/.test(css), 'no item is hidden');
+            assert.ok(!/li:nth-child\(n\+\d+\) \{ display: none/.test(css), 'nothing is cut after the third or sixth');
         });
 
         await check('the parts a reader rarely needs are folds, open in the page and closed on a phone', async () => {
