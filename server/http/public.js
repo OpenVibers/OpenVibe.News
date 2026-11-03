@@ -34,7 +34,6 @@ const { csrfToken, checkCsrf } = require('../auth/forms');
 const cache = require('openvibe-shared/cache-policy');
 const { SITE_SUMMARY } = require('./discovery');
 const homePage = require('../render/home');
-const { pickListRules } = require('../render/short');
 const { createHome } = require('../domain/home');
 
 // The front page in search results and share cards (≤ 160 characters).
@@ -119,8 +118,6 @@ function createPublicRoutes(ctx) {
                 canonical, feeds, next: pager.next ? pager.next.href : null,
                 jsonLd: homePage.homeJsonLd({ abs: (p) => publication.abs(p), topics: topicList, outlets }),
                 styles: [showcase.STYLESHEET], bodyClass: 'news-home',
-                // The rule that shows the picked item of each pick list: one per item, written for this page.
-                inlineStyles: [`@supports selector(:has(*)){@media (max-width:640px){${pickListRules('stories', items.length)}${pickListRules('briefs', homeBriefs.length)}${pickListRules('wire', wire.length)}${pickListRules('topics', topicList.length)}}}`],
                 body: homePage.homeBody({
                     items, pager, feeds, stats, wire: pages.wireSection(wire), wireClusters: wire, topics: topicList, tally, outlets,
                     briefs: homeBriefs,
