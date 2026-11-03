@@ -3,6 +3,7 @@
 // Every field is something this host really serves: the public stories, topics, wire and briefs, the
 // JSON API under /api/v1, llms.txt/llms-full.txt and the sitemap. No OpenAPI document or separate
 // documentation page is published, so neither is named.
+// 11-03 (SEO-3): this site serves /openapi.json now (the contracts' document for it), so it is named below.
 module.exports = {
     id: 'news',
     name: 'OpenVibe.News',
@@ -10,6 +11,7 @@ module.exports = {
     home: 'https://openvibe.news',
     site: 'openvibe.news',
     api: '/api/v1',
+    openapi: '/openapi.json',
     policy: {
         auth: ['none', 'Network OIDC'],
         rateLimit: 'The public pages are not limited by the app; /api/v1 is limited to 240 requests a minute per address and sign-in attempts to 60 per 15 minutes',
