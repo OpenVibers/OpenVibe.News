@@ -99,11 +99,38 @@ function compare(sig, cluster, n = 1, common = null) {
     return { sharedEntities, sharedTerms, score, joins, coreMin: min };
 }
 
+/**
+ * A label names each thing once (11-03, the text lint on /live: "department · doj · doj to monitor elections" and
+ * "ceconomy · ceconomy ag ceconomy"): in rank order, a name is left out when its words sit inside a name already
+ * kept, or a kept name's words sit inside it, or it repeats a word of its own (a headline caught as an entity).
+ */
+function distinctNames(list, max) {
+    const out = [];
+    const words = (s) => String(s || '').split(/\s+/).filter(Boolean);
+    const inside = (a, b) => ` ${b.join(' ')} `.includes(` ${a.join(' ')} `);
+    for (const name of list) {
+        const w = words(name);
+        if (!w.length || new Set(w).size < w.length) continue;
+        if (out.some((kept) => inside(w, words(kept)) || inside(words(kept), w))) continue;
+        out.push(name);
+        if (out.length >= max) break;
+    }
+    return out;
+}
+
 function labelOf(entities, terms) {
     const top = (obj) => Object.entries(obj).sort(([a, x], [b, y]) => (y - x) || (a < b ? -1 : 1)).map(([k]) => k);
-    const e = top(entities).slice(0, 3);
-    const words = e.length ? e : top(terms).slice(0, 4);
+    const e = distinctNames(top(entities), 3);
+    const words = e.length ? e : distinctNames(top(terms), 4);
     return words.length ? words.join(' · ') : 'unlabelled';
+}
+
+/** A stored label as it is shown: the same rule, for labels written before it (they change only on a new report). */
+function tidyLabel(label) {
+    const parts = String(label || '').split(' · ');
+    if (parts.length < 2) return label;
+    const kept = distinctNames(parts, parts.length);
+    return kept.length ? kept.join(' · ') : label;
 }
 
 function createClusters({ store, config, outbox }) {
@@ -242,7 +269,7 @@ function createClusters({ store, config, outbox }) {
     }
 
     const api = {
-        signature, compare, coreMin, commonWords, itemTime, labelOf, assign, resolve, recompute,
+        signature, compare, coreMin, commonWords, itemTime, labelOf, tidyLabel, assign, resolve, recompute,
 
         get: async (id) => await q.get.get(String(id || '')) || null,
         members: async (id) => await q.members.all(id),
@@ -275,7 +302,7 @@ function createClusters({ store, config, outbox }) {
                 const items = byCluster.get(c.id);
                 if (!items || !items.length) continue;
                 items.sort((a, b) => String(b.published_at || '').localeCompare(String(a.published_at || '')));
-                out.push({ id: c.id, label: c.label, updated: c.window_end, items });
+                out.push({ id: c.id, label: tidyLabel(c.label), updated: c.window_end, items });
                 if (out.length >= limit) break;
             }
             return out;
@@ -296,7 +323,7 @@ function createClusters({ store, config, outbox }) {
             const cutoff = store.now() + skewMs;
             for (const r of rows) {
                 if (r.published_at && Date.parse(r.published_at) > cutoff) continue;
-                if (!byCluster.has(r.cid)) byCluster.set(r.cid, { id: r.cid, label: r.label, updated: r.window_end, items: [], sources: new Set() });
+                if (!byCluster.has(r.cid)) byCluster.set(r.cid, { id: r.cid, label: tidyLabel(r.label), updated: r.window_end, items: [], sources: new Set() });
                 const c = byCluster.get(r.cid);
                 c.sources.add(r.source_key);
                 if (r.canonical_url) c.items.push({ id: r.id, headline: r.headline, url: r.canonical_url, outlet: r.outlet, published_at: r.published_at });
@@ -453,4 +480,4 @@ function createClusters({ store, config, outbox }) {
     return api;
 }
 
-module.exports = { createClusters, signature, compare, coreMin, commonWords, itemTime, labelOf };
+module.exports = { createClusters, signature, compare, coreMin, commonWords, itemTime, labelOf, tidyLabel, distinctNames };
