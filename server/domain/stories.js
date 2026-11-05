@@ -23,6 +23,7 @@
 const { ids } = require('openvibe-contracts');
 const { slugify } = require('openvibe-publishing/taxonomy');
 const authorship = require('openvibe-publishing/authorship');
+const seo = require('openvibe-publishing/seo');
 const { ApiError } = require('../http/errors');
 const { actorRef, canPublish } = require('./publication');
 const access = require('./access');
@@ -561,6 +562,36 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
             if (!n) throw new ApiError(422, 'flag.no_note', 'A correction or update note is public text: write it');
             if (n.length > 2000) throw new ApiError(422, 'flag.note_too_long', 'A note is at most 2000 characters');
             return await flagRow(story, { kind, note: n, createdBy: subject });
+        },
+
+        /**
+         * Stories whose head (or published) revision is AI-written and has no review yet: what a
+         * person still has to review before the story can be published or indexed. Editor-only,
+         * oldest first, with the gate's reasons and the review path.
+         */
+        async pendingReviews() {
+            const rows = await db.prepare(`SELECT * FROM news_stories WHERE state IN ('draft', 'published') ORDER BY created_at, id LIMIT 1000`).all();
+            const items = [];
+            for (const story of rows) {
+                const head = await store.revisions.head(story.id);
+                const rev = story.state === 'published' && story.published_revision ? await store.revisions.get(story.id, story.published_revision) : head;
+                const rec = rev && rev.meta && rev.meta.authorship;
+                if (!rec || !(rec.mode === 'ai' || rec.mode === 'hybrid' || rec.stubProvider)) continue;
+                const review = await store.reviews.latest(story.id, rev.number);
+                if (review) continue;
+                const decision = await publication.decide(story, rev, { state: story.state });
+                items.push({
+                    site: 'news', kind: 'news_story', id: story.id,
+                    title: rev.fields.headline || story.working_headline || story.slug,
+                    revision: rev.number, state: story.state,
+                    url: publication.storyUrl(story), editUrl: `/edit/stories/${story.id}`,
+                    createdAt: new Date(rev.createdAt).toISOString(),
+                    reasons: decision.reasons.map((r) => ({ ...r, text: (seo.REASON_BY_CODE[r.code] || {}).description || r.code })),
+                    review: { method: 'POST', path: `/api/v1/stories/${encodeURIComponent(story.id)}/reviews` },
+                    ...(story.state !== 'published' ? { publish: { method: 'POST', path: `/api/v1/stories/${encodeURIComponent(story.id)}/publish` } } : {}),
+                });
+            }
+            return items.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
         },
 
         /** A person's review of one revision (what lets an AI draft be published and indexed). */

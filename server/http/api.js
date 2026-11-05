@@ -18,6 +18,8 @@
  *   POST   /stories/:id/unpublish                   news.story.publish
  *   POST   /stories/:id/retract                     news.story.retract      { note }
  *   POST   /stories/:id/reviews                     people only             { revision, decision, note? }
+ *   POST   /briefs/:id/reviews                      editors                 { kind, tone, decision, note? }
+ *   GET    /review-queue                            editors                 AI briefs and stories waiting for a person
  *   POST   /stories/:id/flags                       news.story.revise       { kind: correction|update, note }
  *   POST   /stories/:id/sources                     news.source.attach      { item: nsi_… | itm_… }
  *   DELETE /stories/:id/sources/:item               news.source.attach
@@ -72,7 +74,7 @@ function itemDto(it) {
 }
 
 function createApi(ctx) {
-    const { config, stories, clusters, publication, reading, topics, ingest, viewers, limits } = ctx;
+    const { config, stories, clusters, briefs, publication, reading, topics, ingest, viewers, limits } = ctx;
     const router = express.Router();
     router.use(cors(config.apiCorsOrigins));
     router.use(viewers.middleware());
@@ -82,6 +84,24 @@ function createApi(ctx) {
     // below names its budget after its capability guard, before its body is read.
     router.use(limits.reads('news.read'));
     const B = (name) => limits.budget(name);
+
+    // The reviewer queue: AI briefs and AI story revisions no person has reviewed yet, editor-only.
+    router.get('/review-queue', run(async (req) => {
+        access.requireEditor(config, req.viewer);
+        const items = [];
+        if (briefs) items.push(...await briefs.pendingReviews());
+        items.push(...await stories.pendingReviews());
+        return { items: items.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt)) };
+    }));
+
+    // A person reviews an AI brief. The review log is append-only; the brief page leaves noindex only
+    // while the approval still matches the brief (a remake waits for a person again).
+    router.post('/briefs/:id/reviews', B('news.story.publish'), jsonBody, run(async (req) => {
+        access.requireEditor(config, req.viewer);
+        if (!briefs) throw new ApiError(503, 'briefs.unavailable', 'AI briefs are not configured');
+        const b = req.body || {};
+        return { review: await briefs.review(req.viewer, req.params.id, { kind: b.kind, tone: b.tone, decision: b.decision, note: b.note }) };
+    }, 201));
 
     const tp = (req) => ({ traceparent: req.ov && req.ov.traceparent });
     /** Reads for editors: a service passed its capability guard; a browser must be an editor. */

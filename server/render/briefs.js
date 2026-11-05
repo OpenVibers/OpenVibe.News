@@ -49,7 +49,7 @@ function reportsOnlyPage({ cluster, reports, outlets, minOutlets }) {
 }
 
 /** /briefs/:id */
-function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake, notice = null, enough = true, minOutlets = 2 }) {
+function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake, notice = null, enough = true, minOutlets = 2, review = null }) {
     const outlets = [...new Set(reports.map((r) => r.outlet))];
     if (!enough) return reportsOnlyPage({ cluster, reports, outlets, minOutlets });
     const shown = brief && !brief.stub ? brief : null;
@@ -59,7 +59,7 @@ function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake
     const persp = perspectives && !perspectives.stub ? perspectives : null;
     return String(h`<header class="site-header"><p class="eyebrow"><span class="badge badge-ai">AI brief</span> from ${coverage(reports, outlets)}</p>
 <h1>${shown && shown.headline ? shown.headline : cluster.label}</h1>
-<p class="meta">${AI_NOTE}</p></header>
+<p class="meta">${review ? h`Reviewed by a person <time datetime="${new Date(review.reviewedAt).toISOString()}">${time(review.reviewedAt)}</time>. ` : ''}${AI_NOTE}</p></header>
 ${notice ? h`<p class="notice">${notice}</p>` : ''}
 ${tabs}
 <section class="brief" aria-label="The brief">

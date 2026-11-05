@@ -43,6 +43,15 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
             ON CONFLICT (cluster_id, kind, tone) DO UPDATE SET headline = excluded.headline, paragraphs = excluded.paragraphs, source_ids = excluded.source_ids,
                 gaps = excluded.gaps, run_id = excluded.run_id, model = excluded.model, stub = excluded.stub, item_count = excluded.item_count,
                 cluster_updated_at = excluded.cluster_updated_at, created_at = excluded.created_at`),
+        reviewLatest: db.prepare('SELECT * FROM news_brief_reviews WHERE cluster_id = ? AND kind = ? AND tone = ? ORDER BY id DESC LIMIT 1'),
+        reviewInsert: db.prepare(`INSERT INTO news_brief_reviews (cluster_id, kind, tone, brief_created_at, reviewer, decision, note, reviewed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`),
+        pending: db.prepare(`SELECT b.*, c.label, c.window_end, c.updated_at AS cluster_updated_at_now,
+                (SELECT count(DISTINCT i.outlet) FROM news_source_items i WHERE i.cluster_id = c.id AND i.status = 'active' AND i.removed_at IS NULL) AS outlets,
+                (SELECT count(*) FROM news_source_items i WHERE i.cluster_id = c.id AND i.status = 'active' AND i.removed_at IS NULL) AS item_count_now
+            FROM news_cluster_briefs b JOIN news_story_clusters c ON c.id = b.cluster_id
+            WHERE b.kind = 'summary' AND b.tone = 'neutral' AND b.stub = false AND c.status = 'open'
+            ORDER BY b.created_at, b.cluster_id LIMIT 1000`),
         latest: db.prepare(`SELECT * FROM (SELECT b.*, c.label, c.window_end,
                 (SELECT count(DISTINCT i.outlet) FROM news_source_items i WHERE i.cluster_id = c.id AND i.status = 'active' AND i.removed_at IS NULL) AS outlets
               FROM news_cluster_briefs b JOIN news_story_clusters c ON c.id = b.cluster_id
@@ -72,6 +81,69 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
             paragraphs: parse(row.paragraphs, []), source_ids: parse(row.source_ids, []), gaps: parse(row.gaps, []),
             run_id: row.run_id || null, model: row.model || null, stub: Boolean(row.stub), item_count: Number(row.item_count), created_at: Number(row.created_at),
         };
+    }
+
+    const reviewShape = (r) => (r ? { id: r.id, clusterId: r.cluster_id, kind: r.kind, tone: r.tone, briefCreatedAt: Number(r.brief_created_at), reviewer: r.reviewer, decision: r.decision, note: r.note, reviewedAt: Number(r.reviewed_at) } : null);
+
+    /** The latest review of one brief (any decision), or null. */
+    async function reviewOf(clusterId, { kind = 'summary', tone = 'neutral' } = {}) {
+        return reviewShape(await q.reviewLatest.get(clusterId, kind, tone));
+    }
+
+    /** An approval counts only for the exact brief it reviewed (a remake changes created_at). */
+    function isApproved(brief, review) {
+        return Boolean(brief && review && review.decision === 'approved' && Number(review.briefCreatedAt) === Number(brief.created_at));
+    }
+
+    /** A person's review of a brief. Only a person (usr_…) can review; the review log is the audit. */
+    async function review(viewer, clusterId, { kind = 'summary', tone = 'neutral', decision, note = null } = {}) {
+        if (!viewer || viewer.kind !== 'user' || !viewer.subject) throw Object.assign(new Error('Only a signed-in person can review a brief'), { code: 'review.person_required', status: 403 });
+        if (!KINDS.includes(kind) || !TONES.includes(tone)) throw Object.assign(new Error('kind or tone not known'), { code: 'brief.invalid', status: 422 });
+        if (decision !== 'approved' && decision !== 'rejected') throw Object.assign(new Error('decision is approved or rejected'), { code: 'review.invalid_decision', status: 422 });
+        const got = await get(clusterId, { kind, tone });
+        if (!got || !got.brief) throw Object.assign(new Error('No such brief'), { code: 'brief.not_found', status: 404 });
+        if (got.brief.stub || !got.enough) throw Object.assign(new Error('This brief is not shown to readers'), { code: 'brief.not_public', status: 422 });
+        const row = await q.reviewInsert.get(String(clusterId), kind, tone, Number(got.brief.created_at), viewer.subject, decision, note == null ? null : String(note).slice(0, 2000), store.now());
+        return reviewShape(row);
+    }
+
+    /** Every current brief nobody has reviewed yet, oldest first: what the reviewer queue lists. */
+    async function pendingReviews() {
+        const items = [];
+        for (const row of await q.pending.all()) {
+            if (Number(row.outlets) < MIN_OUTLETS) continue;
+            if (Number(row.item_count) !== Number(row.item_count_now) || Number(row.cluster_updated_at) !== Number(row.cluster_updated_at_now)) continue;
+            const brief = shape(row);
+            const review = await reviewOf(row.cluster_id);
+            if (review && Number(review.briefCreatedAt) === Number(brief.created_at)) continue;   // a decision for this exact text
+            items.push({
+                site: 'news', kind: 'ai_brief', id: row.cluster_id,
+                title: brief.headline || row.label, revision: null,
+                url: `/briefs/${row.cluster_id}`,
+                createdAt: new Date(brief.created_at).toISOString(),
+                reasons: [
+                    { code: 'ai_generated_unreviewed', effect: 'noindex', detail: 'a person has not reviewed this brief', text: 'AI-written and not reviewed by a person.' },
+                    { code: 'noindex_requested', effect: 'noindex', detail: 'briefs are noindex until reviewed', text: 'An editor asked for it to stay out of search engines until a person reviews it.' },
+                ],
+                review: { method: 'POST', path: `/api/v1/briefs/${encodeURIComponent(row.cluster_id)}/reviews` },
+            });
+        }
+        return items;
+    }
+
+    /** Reviewed briefs that still match their review, newest review first, for the sitemap. */
+    async function reviewed(limit = 1000) {
+        const out = [];
+        for (const row of await q.pending.all()) {
+            if (Number(row.outlets) < MIN_OUTLETS) continue;
+            if (Number(row.item_count) !== Number(row.item_count_now) || Number(row.cluster_updated_at) !== Number(row.cluster_updated_at_now)) continue;
+            const brief = shape(row);
+            const review = await reviewOf(row.cluster_id);
+            if (!isApproved(brief, review)) continue;
+            out.push({ ...brief, label: row.label, window_end: Number(row.window_end), review });
+            if (out.length >= limit) break;
+        }
+        return out.sort((a, b) => b.review.reviewedAt - a.review.reviewedAt);
     }
 
     /** Make (or remake) one brief. Throws the AI client's error when the run fails; makes nothing without cited text. */
@@ -119,7 +191,7 @@ function createBriefs({ store, ai, log = console, minOutlets = 2 }) {
 
     const latest = async (limit = 12) => (await q.latest.all(MIN_OUTLETS, limit)).map((r) => ({ ...shape(r), label: r.label, window_end: Number(r.window_end), outlets: Number(r.outlets) }));
 
-    return { TONES, TONE_TEXT, KINDS, MIN_REPORTS, MIN_OUTLETS, get, make, sweep, latest };
+    return { TONES, TONE_TEXT, KINDS, MIN_REPORTS, MIN_OUTLETS, get, make, sweep, latest, review, reviewOf, isApproved, pendingReviews, reviewed };
 }
 
 module.exports = { createBriefs, TONES, TONE_TEXT, MIN_REPORTS };
