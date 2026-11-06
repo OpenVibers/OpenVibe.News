@@ -43,7 +43,7 @@ view. Stories stay editor-written (below); beside them News now has:
   minutes an address, 40 an hour in all), never by a link a crawler follows.
 - **Live** (`/live`): the newest reports as they arrive, grouped, refreshing itself every minute (`Refresh: 60`), with
   **Breaking** on a subject three or more reports covered in the last two hours, and links to their AI briefs.
-- Briefs and Live are `noindex`: they are AI text and other publishers' headlines, not News' writing.
+- Briefs and Live are `noindex` by default: they are AI text and other publishers' headlines, not News' writing. A person can review a brief (`POST /api/v1/briefs/:id/reviews`, the `/admin/review` queue); a reviewed summary brief with enough independent outlets becomes indexable and is listed in `/sitemaps/briefs.xml`. A remake after its cluster changes waits for a person again.
   `NEWS_AI_BRIEFS=off` turns briefs off.
 
 ## Owns

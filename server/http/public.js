@@ -158,7 +158,8 @@ function createPublicRoutes(ctx) {
     }));
 
     // ── AI briefs and the live view (domain/briefs.js, render/briefs.js) ──
-    // Briefs are AI text: labelled, every paragraph cited, never a story and never indexed. A reader may ask for another
+    // Briefs are AI text: labelled, every paragraph cited, never a story. They are noindex until a person reviews
+    // them (the /admin/review queue); a reviewed, current summary may be indexed. A reader may ask for another
     // tone or the outlets' comparison (a POST, from this site, a few an address and a few dozen an hour in all), never a
     // crawler following a link.
     const noindex = (path) => seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: seo.canonicalUrl(config.baseUrl, path), wordCount: 0, noindex: true }, { policy: { minWords: 0 }, now: store.now() });
@@ -181,12 +182,20 @@ function createPublicRoutes(ctx) {
         if (!got || !got.reports.length) return notFound(req, res);
         const persp = await briefs.get(id, { kind: 'perspectives', tone: 'neutral' });
         const notice = req.query.made === '1' ? 'Written just now.' : (req.query.failed ? String(req.query.failed).slice(0, 200) : null);
+        // A person's approval is what lets this page leave noindex. It counts only for the exact text
+        // reviewed: a remake changes created_at, so an old approval no longer applies.
+        const review = await briefs.reviewOf(id, { kind: 'summary', tone });
+        const reviewed = tone === 'neutral' && got.enough && got.fresh && briefs.isApproved(got.brief, review);
+        const canonical = `${config.baseUrl}/briefs/${id}`;
+        const decision = reviewed
+            ? seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: canonical, wordCount: 0 }, { policy: { minWords: 0 }, now: store.now() })
+            : noindex(`/briefs/${id}`);
         send(req, res, 200, {
             title: got.enough ? `${got.brief && got.brief.headline ? got.brief.headline : got.cluster.label} (AI brief)` : `${got.cluster.label} (reports)`,
             description: got.enough ? 'An AI summary of the reports on this subject, every paragraph linked to its reports.' : 'The reports on this subject so far. Too few outlets have covered it for an AI summary.',
-            decision: noindex(`/briefs/${id}`), canonical: `${config.baseUrl}/briefs/${id}`, localStyles: ['css/briefs.css'],
-            body: briefPages.briefPage({ ...got, tone, perspectives: persp ? persp.brief : null, canMake: canMake(), notice }),
-        }, { cacheable: !notice });
+            decision, canonical, localStyles: ['css/briefs.css'],
+            body: briefPages.briefPage({ ...got, tone, perspectives: persp ? persp.brief : null, canMake: canMake(), notice, review: reviewed ? review : null }),
+        }, { cacheable: !notice && (reviewed || !got.brief) });
     }));
 
     router.post('/briefs/:id/make', makeLimit, express.urlencoded({ extended: false, limit: '4kb' }), wrap(async (req, res) => {

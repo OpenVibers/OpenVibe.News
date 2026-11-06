@@ -33,6 +33,7 @@ const SECURITY_EXPIRES = '2027-10-29T00:00:00.000Z';
 
 function createDiscoveryRoutes(ctx) {
     const { config, store, publication, topics, stories, clusters } = ctx;
+    const briefs = ctx.briefs;
     const homeData = ctx.home || createHome({ store });
     const router = express.Router();
     const { db } = store;
@@ -147,7 +148,7 @@ function createDiscoveryRoutes(ctx) {
                     title: 'Pages',
                     pages: [
                         { title: 'OpenVibe.News', url: abs('/'), text: SITE_SUMMARY },
-                        { title: 'Topics', url: abs('/topics'), text: `The ${topicList.length} topics OpenVibe.News follows: ${topicList.map((t) => t.name).join(', ')}. Each topic page carries its stories, its AI briefs (labelled, noindex) and the wire of reports on it.` },
+                        { title: 'Topics', url: abs('/topics'), text: `The ${topicList.length} topics OpenVibe.News follows: ${topicList.map((t) => t.name).join(', ')}. Each topic page carries its stories, its AI briefs (labelled; unreviewed ones noindex) and the wire of reports on it.` },
                         { title: 'What shipped on OpenVibe.News', url: abs('/updates'), text: 'Every change deployed to OpenVibe.News, newest first.' },
                     ],
                 },
@@ -170,6 +171,19 @@ function createDiscoveryRoutes(ctx) {
             ],
         }));
     });
+
+    /** AI briefs a person reviewed while the approval still matches the text: the only briefs indexed. */
+    async function briefEntries() {
+        if (!briefs) return [];
+        const reviewed = await briefs.reviewed();
+        return reviewed.map((b) => {
+            const path = `/briefs/${b.cluster_id}`;
+            return {
+                loc: abs(path), lastmod: new Date(b.review.reviewedAt).toISOString(),
+                decision: seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: abs(path), wordCount: 0 }, { policy: { minWords: 0 }, now: store.now() }),
+            };
+        });
+    }
 
     async function topicEntries(stories) {
         const byTopic = new Map();
@@ -197,11 +211,15 @@ function createDiscoveryRoutes(ctx) {
             const known = times.filter((t) => Number.isFinite(t));
             return known.length ? new Date(Math.max(...known)).toISOString() : undefined;
         };
-        xml(res, seo.sitemapIndex([
+        const briefSitemap = await briefEntries();
+        const sections = [
             { loc: abs('/sitemaps/pages.xml'), lastmod: newest(site.filter((e) => e.decision.indexable).map((e) => new Date(e.lastmod).getTime())) },
             { loc: abs('/sitemaps/stories.xml'), lastmod: newest(indexed.map((e) => new Date(e.story.published_at).getTime())) },
             { loc: abs('/sitemaps/topics.xml'), lastmod: newest(topics.map((e) => new Date(e.lastmod).getTime())) },
-        ]));
+        ];
+        // A sitemap index carries no <loc> without a <lastmod>: list the briefs section only once one is reviewed.
+        if (briefSitemap.length) sections.push({ loc: abs('/sitemaps/briefs.xml'), lastmod: newest(briefSitemap.map((e) => new Date(e.lastmod).getTime())) });
+        xml(res, seo.sitemapIndex(sections));
     });
 
     // The site's own pages (never empty): what /llms.txt lists and a crawler reaches from the home page.
@@ -215,6 +233,10 @@ function createDiscoveryRoutes(ctx) {
 
     router.get('/sitemaps/topics.xml', async (_req, res) => {
         xml(res, seo.sitemap(await topicEntries(await storyEntries())).files[0]);
+    });
+
+    router.get('/sitemaps/briefs.xml', async (_req, res) => {
+        xml(res, seo.sitemap(await briefEntries()).files[0]);
     });
 
     return router;
