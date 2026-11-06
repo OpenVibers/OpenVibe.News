@@ -10,6 +10,8 @@
 const ssr = require('openvibe-publishing/ssr');
 
 const { html: h, raw } = ssr;
+const kit = require('openvibe-shared/kit');
+const ovServe = require('openvibe-shared/serve');
 
 const dateLabel = (v) => (v ? new Date(v).toISOString().slice(0, 10) : null);
 const time = (v) => raw(ssr.timeTag(v == null ? null : new Date(v).toISOString(), { label: dateLabel(v) || undefined }));
@@ -194,6 +196,7 @@ ${raw(notices.join(''))}
 <h1>${m.headline}</h1>
 <p class="byline">${m.authors.length ? h`By ${m.authors.map((a) => a.name).join(', ')} · ` : ''}OpenVibe.News${m.first_published_at ? h` · ${time(Date.parse(m.first_published_at))}` : ''}${m.rev.number > 1 && m.first_published_at && Date.parse(m.updated_at) > Date.parse(m.first_published_at) + 60000 ? h` · updated ${time(Date.parse(m.updated_at))}` : ''}${m.topic ? h` · <a href="/topics/${m.topic.slug}">${m.topic.name}</a>` : ''}${m.story.state !== 'published' && m.story.state !== 'retracted' ? h` <span class="badge">${m.story.state}</span>` : ''}</p>
 ${m.disclosure ? h`<p class="disclosure" role="note"><strong>${m.disclosure.short}.</strong> ${m.disclosure.long}</p>` : ''}
+<p class="story-share">${raw(kit.share({ title: m.headline, url: m.url, text: m.paragraphs[0] ? m.paragraphs[0].text.slice(0, 200) : '', kind: 'story', id: m.story.id }))}</p>
 </header>
 <div class="story-body">${m.paragraphs.map((p) => h`<p${p.supported ? '' : raw(' class="unsupported"')}>${p.text} ${cites(p.sources)}${p.supported ? '' : h` <span class="badge">source removed</span>`}</p>`)}</div>
 <p class="meta">Numbers in brackets point to the sources below. Headlines, outlets, authors and dates in the table are as each source published them; the text above is written by OpenVibe.News.</p>
@@ -208,8 +211,29 @@ ${m.corrections.length || m.retraction ? h`<ol>${m.corrections.map((c) => h`<li>
 ${raw(comments ? commentsSection(comments, { path: m.path, csrf, signedIn, loginUrl }) : '')}`);
 }
 
+/**
+ * The page a person who is not on the list sees (design 2026-11-06): the audience, never the
+ * headline, the text or the sources. OVShare.gate offers "Ask for access" when signed in.
+ */
+function sharedGate({ id, signedInAs = null, signInUrl = '/auth/login' }) {
+    return String(h`<section class="message">
+<h1>A story on OpenVibe.News</h1>
+<p>This is shared with specific people.</p>
+<div id="story-gate"><p>This story is shared with specific people on OpenVibe.News.</p>
+<p><a class="button" href="${signInUrl}">Sign in</a></p></div>
+<script src="${ovServe.url('ov-share.js')}" defer></script>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  var el = document.getElementById('story-gate');
+  if (el && window.OVShare) OVShare.gate(el, { kind: 'story', id: ${JSON.stringify(id)},
+    signedInAs: ${JSON.stringify(signedInAs || '')}, signInUrl: ${JSON.stringify(signInUrl)} });
+});
+</script>
+</section>`);
+}
+
 function message({ heading, text, action }) {
     return String(h`<section class="message"><h1>${heading}</h1><p>${text}</p>${action ? h`<p><a class="button" href="${action.href}">${action.label}</a></p>` : ''}</section>`);
 }
 
-module.exports = { home, topicsIndex, topicPage, storyPage, commentsSection, message, storyList, time, dateLabel, cites, httpHref, wireSection, wirePage };
+module.exports = { home, topicsIndex, topicPage, storyPage, commentsSection, sharedGate, message, storyList, time, dateLabel, cites, httpHref, wireSection, wirePage };

@@ -41,7 +41,7 @@ function createDiscoveryRoutes(ctx) {
 
     async function storyEntries() {
         // Revisions in one query, whatever the number of stories (no N+1).
-        const rows = await db.prepare("SELECT * FROM news_stories WHERE state IN ('published','retracted') AND published_revision IS NOT NULL ORDER BY published_at DESC, id LIMIT 50000").all();
+        const rows = await db.prepare("SELECT * FROM news_stories WHERE state IN ('published','retracted') AND audience = 'public' AND published_revision IS NOT NULL ORDER BY published_at DESC, id LIMIT 50000").all();
         const revs = await store.revisions.getMany(rows.map((s) => ({ entityId: s.id, revision: s.published_revision })));
         const out = [];
         for (const [i, story] of rows.entries()) out.push({ story, rev: revs[i], decision: await publication.decide(story, revs[i]) });

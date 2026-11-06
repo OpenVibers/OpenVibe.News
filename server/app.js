@@ -33,6 +33,7 @@ const { createDiscussion } = require('./domain/discussion');
 const { createClusters } = require('./domain/clusters');
 const { createIngest } = require('./domain/source-items');
 const { createStories } = require('./domain/stories');
+const { createSharing, describeRef } = require('./sharing');
 const { createTopics } = require('./domain/topics');
 const { createReading } = require('./domain/reading');
 const { createPublicRoutes } = require('./http/public');
@@ -84,7 +85,9 @@ async function createApp(opts = {}) {
     const community = createCommunity({ store, config, fetchImpl, log });
     const discussion = createDiscussion({ store, publication, community, log });
     const ingest = createIngest({ store, config, clusters, outbox, sources, discussion, log });
-    const stories = createStories({ store, config, publication, clusters, outbox, ai, discussion, log });
+    // Sharing (openvibe-sdk/share): a story's share row, its people and the one access check for the story page.
+    const sharing = opts.sharing || createSharing({ db: store.db, config, outbox, now: store.now, fetchImpl: opts.fetchImpl, log });
+    const stories = createStories({ store, config, publication, clusters, outbox, ai, discussion, log, sharing });
     ingest.setStories(stories);
     const topics = createTopics({ store });
     // Topics are the only seed (idempotent: missing slugs are added, existing ones never changed).
@@ -107,7 +110,7 @@ async function createApp(opts = {}) {
     const briefs = createBriefs({ store, ai: config.briefs.enabled ? ai : null, log, minOutlets: config.indexing && config.indexing.minIndependentSources });
     const worker = createWorker({ config, ingest, outbox, briefs, log });
 
-    const ctx = { config, store, accountData, accountSend, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow, briefs };
+    const ctx = { config, store, accountData, accountSend, outbox, publication, clusters, sources, ai, community, discussion, ingest, stories, topics, people, reading, auth, viewers, worker, indexnow, briefs, sharing };
 
     const app = express();
     // GET /openapi.json (SEO-3): this service's public API as OpenAPI 3.1, generated from the contracts
@@ -206,6 +209,18 @@ async function createApp(opts = {}) {
     }));
 
     // ── API ─────────────────────────────────────────────────
+    // ── /api/v1/<kind>/<id>/share — the uniform share API (openvibe-sdk/share) ────
+    {
+        const shareApi = express.Router();
+        shareApi.use(viewers.middleware());
+        shareApi.use(sharing.shares.router({
+            service: 'news',
+            authenticate: (req) => sharing.shareViewer(req.viewer),
+            describe: describeRef(store.db, config),
+        }));
+        const SHARE_PATH = /^\/api\/v1\/(?:shared-with-me$|share\/people$|[^/]+\/[^/]+\/share(?:\/|$))/;
+        app.use((req, res, next) => (SHARE_PATH.test(req.path) ? shareApi(req, res, next) : next()));
+    }
     app.use('/api/v1', rateLimit({ windowMs: 60_000, max: 240, standardHeaders: true, legacyHeaders: false }), createApi(ctx));
 
     // ── Discovery, editor desk, public pages ────────────────
