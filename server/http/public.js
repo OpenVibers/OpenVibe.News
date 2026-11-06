@@ -158,7 +158,8 @@ function createPublicRoutes(ctx) {
     }));
 
     // ── AI briefs and the live view (domain/briefs.js, render/briefs.js) ──
-    // Briefs are AI text: labelled, every paragraph cited, never a story and never indexed. A reader may ask for another
+    // Briefs are AI text: labelled, every paragraph cited, never a story. They are noindex until a person reviews
+    // them (the /admin/review queue); a reviewed, current summary may be indexed. A reader may ask for another
     // tone or the outlets' comparison (a POST, from this site, a few an address and a few dozen an hour in all), never a
     // crawler following a link.
     const noindex = (path) => seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: seo.canonicalUrl(config.baseUrl, path), wordCount: 0, noindex: true }, { policy: { minWords: 0 }, now: store.now() });

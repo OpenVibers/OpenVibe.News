@@ -148,7 +148,7 @@ function createDiscoveryRoutes(ctx) {
                     title: 'Pages',
                     pages: [
                         { title: 'OpenVibe.News', url: abs('/'), text: SITE_SUMMARY },
-                        { title: 'Topics', url: abs('/topics'), text: `The ${topicList.length} topics OpenVibe.News follows: ${topicList.map((t) => t.name).join(', ')}. Each topic page carries its stories, its AI briefs (labelled, noindex) and the wire of reports on it.` },
+                        { title: 'Topics', url: abs('/topics'), text: `The ${topicList.length} topics OpenVibe.News follows: ${topicList.map((t) => t.name).join(', ')}. Each topic page carries its stories, its AI briefs (labelled; unreviewed ones noindex) and the wire of reports on it.` },
                         { title: 'What shipped on OpenVibe.News', url: abs('/updates'), text: 'Every change deployed to OpenVibe.News, newest first.' },
                     ],
                 },
