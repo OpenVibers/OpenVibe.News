@@ -341,8 +341,10 @@ function createPublicRoutes(ctx) {
             }
             return notFound(req, res);
         }
-        // A published story the owner narrowed: the share row decides, editors aside.
-        if (!editor && sharing && !await sharing.canView(req.viewer, story.id).catch(() => false)) {
+        // A published story the owner narrowed: the share row decides, editors aside. A story from before
+        // sharing has no row, and was public.
+        const publishedRow = sharing ? await sharing.shareOf(story.id).catch(() => null) : null;
+        if (!editor && publishedRow && !await sharing.canView(req.viewer, story.id).catch(() => false)) {
             const row = await sharing.shareOf(story.id).catch(() => null);
             if (row && row.audience === 'people') {
                 return send(req, res, 404, {
