@@ -37,6 +37,7 @@ const { createSharing, describeRef } = require('./sharing');
 const { createTopics } = require('./domain/topics');
 const { createReading } = require('./domain/reading');
 const { createPublicRoutes } = require('./http/public');
+const { createMenuCard } = require('./menu-card');
 const { createEditorRoutes } = require('./http/editor');
 const { createApi } = require('./http/api');
 const { createDiscoveryRoutes } = require('./http/discovery');
@@ -207,6 +208,18 @@ async function createApp(opts = {}) {
             res.setHeader('Cache-Control', cache.assetHeaders(rel, { hashed: !!v && v === assetVersion(rel) }));
         },
     }));
+
+    // The menu's network card (frame.menu-cards@1): the newest published stories, read anonymously. It is the
+    // same public listing the home page uses, so a draft or a retracted story never reaches the card.
+    {
+        const menuCard = createMenuCard({
+            load: async () => {
+                const { stories: rows } = await stories.listPublished({ limit: 6 });
+                return await reading.listItems(rows);
+            },
+        });
+        app.get('/.well-known/openvibe-menu.json', menuCard.handler);
+    }
 
     // ── API ─────────────────────────────────────────────────
     // ── /api/v1/<kind>/<id>/share — the uniform share API (openvibe-sdk/share) ────

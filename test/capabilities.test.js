@@ -1,12 +1,9 @@
 'use strict';
 /**
  * The news.* capabilities are released by openvibe-contracts, so the service guards delegate to the
- * library's grant rule rather than deciding a proposed id locally. One id is still a proposal and
- * waits for a Contracts release — news.review.ai_editor (the AI editor's review kind) — so it is
- * decided by the same grant rule locally until then (server/auth/capabilities.js PROPOSED). These
- * pin that: every guarded id is defined by the installed contracts and the news service manifest,
- * except the proposal, which is tracked as one; and checkCapability agrees with capabilities.check
- * for an exact grant, a prefix grant, no grant, and an id nobody defines.
+ * library's grant rule rather than deciding a proposed id locally. These pin that: every guarded id
+ * is defined by the installed contracts and the news service manifest; and checkCapability agrees
+ * with capabilities.check for an exact grant, a prefix grant, no grant, and an id nobody defines.
  */
 const assert = require('assert');
 const { capabilities, services } = require('openvibe-contracts');
@@ -27,8 +24,6 @@ const { check, done } = require('./helpers/boot');
             }
             assert.strictEqual(cap.owner, 'news', `${id} is owned by news`);
         }
-        // The AI editor's id is the one proposal; when Contracts releases it, this line goes.
-        assert.strictEqual(capabilities.get('news.review.ai_editor'), undefined);
     });
 
     await check('checkCapability follows the contracts grant rule (exact, prefix, denied, unknown)', () => {
