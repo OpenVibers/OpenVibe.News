@@ -55,7 +55,7 @@ function formatBody(paragraphs) {
     return (paragraphs || []).map((p) => `${p.text}${p.sources && p.sources.length ? ` [${p.sources.join(', ')}]` : ''}`).join('\n\n');
 }
 
-function createStories({ store, config, publication, clusters, outbox, ai = null, discussion = null, log = console }) {
+function createStories({ store, config, publication, clusters, outbox, ai = null, discussion = null, log = console, sharing = null }) {
     const { db } = store;
     const q = {
         byId: db.prepare('SELECT * FROM news_stories WHERE id = ?'),
@@ -270,7 +270,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
 
         /** Published and retracted stories (retracted ones stay listed with their notice). */
         async listPublished({ topicId = null, limit = 20, offset = 0 } = {}) {
-            const where = ["state IN ('published','retracted')"];
+            const where = ["state IN ('published','retracted')", "audience = 'public'"];
             const args = [];
             if (topicId) { where.push('topic_id = ?'); args.push(topicId); }
             const w = where.join(' AND ');
@@ -308,6 +308,8 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                 await db.prepare(`INSERT INTO news_stories (id, slug, working_headline, cluster_id, topic_id, state, noindex, created_by, created_at, updated_at)
                             VALUES (?, ?, ?, ?, ?, 'draft', 0, ?, ?, ?)`).run(id, slug, headline, cluster ? cluster.id : null, topic ? topic.id : null, subject, now, now);
                 const story = await q.byId.get(id);
+                // A new story is a draft: Only me until its editor shares it or publishes it.
+                if (sharing) await sharing.register({ subject: /^usr_/.test(String(subject)) ? subject : null }, id, 'private');
                 if (cluster) {
                     const items = (await clusters.members(cluster.id)).filter((it) => it.status === 'active')
                         .sort((a, b) => String(a.published_at || '').localeCompare(String(b.published_at || '')) || a.first_seen_at - b.first_seen_at || (a.id < b.id ? -1 : 1));
@@ -511,6 +513,8 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                 const before = publication.snapshot(cur);
                 await db.prepare(`UPDATE news_stories SET state = 'published', published_revision = ?, first_published_at = COALESCE(first_published_at, ?),
                             published_at = ?, updated_at = ? WHERE id = ?`).run(rev.number, now, now, now, story.id);
+                // Publishing makes it Everyone (the sheet keeps the row in step afterwards).
+                if (sharing) await sharing.syncAudience(story.id, 'public');
                 const subject = viewer.subject;
                 for (const f of (await q.flags.all(story.id)).filter((x) => x.status === 'open' && (x.kind === 'correction' || x.kind === 'update'))) {
                     await db.prepare("UPDATE news_editorial_flags SET status = 'published', revision = ?, resolved_by = ?, resolved_at = ? WHERE id = ?").run(rev.number, subject, now, f.id);
@@ -530,6 +534,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                 if (discussion) await discussion.watch(story.id);
                 const before = publication.snapshot(cur);
                 await db.prepare("UPDATE news_stories SET state = 'unpublished', updated_at = ? WHERE id = ?").run(store.now(), story.id);
+                if (sharing) await sharing.syncAudience(story.id, 'private');
                 return { changed: true, story: (await publication.afterChange(before, story.id, { actor: viewer, traceparent })).story };
             });
         },

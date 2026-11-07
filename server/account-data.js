@@ -26,8 +26,25 @@ const TABLES = [
     { table: 'news_story_revisions', subject: 'author', file: 'story-revisions.json', order: 'created_at', columns: ['id', 'entity_id', 'number', 'kind', 'message', 'created_at'], erase: editorial('a published story keeps its edit history and byline as the publication record') },
 ];
 
+
+/** The sharing system's rows (openvibe-sdk/share): jsonb subjects, so the SDK's table map cannot name them. */
+async function shareExport(db, subject) {
+    const owned = await db.many("SELECT * FROM shares WHERE service = $1 AND owner_subject->>'id' = $2", ['news', subject]);
+    const member = await db.many("SELECT * FROM share_members WHERE service = $1 AND subject->>'id' = $2", ['news', subject]);
+    const asked = await db.many("SELECT * FROM share_access_requests WHERE service = $1 AND subject->>'id' = $2", ['news', subject]);
+    return owned.length || member.length || asked.length ? [{ name: 'shares.json', content: { owned, member_of: member, requests: asked } }] : [];
+}
+async function shareErase(t, subjects) {
+    for (const subject of subjects) {
+        await t.exec("DELETE FROM share_members WHERE service = $1 AND subject->>'id' = $2", ['news', subject]);
+        await t.exec("DELETE FROM share_access_requests WHERE service = $1 AND subject->>'id' = $2", ['news', subject]);
+        await t.exec("DELETE FROM share_transfers WHERE service = $1 AND (from_subject->>'id' = $2 OR to_subject->>'id' = $2)", ['news', subject]);
+        await t.exec("DELETE FROM shares WHERE service = $1 AND owner_subject->>'id' = $2", ['news', subject]);
+    }
+}
+
 function create({ db, log = console } = {}) {
-    return createAccountData({ db, service: 'news', tables: TABLES, log });
+    return createAccountData({ db, service: 'news', tables: TABLES, extraExport: (d, subject) => shareExport(d, subject), extraErase: (t, subjects) => shareErase(t, subjects), log });
 }
 
 module.exports = { create, TABLES, TOPICS };

@@ -42,7 +42,7 @@ const HOME_DESCRIPTION = 'News you can check: AI briefs and stories where every 
 const PER_PAGE = 20;
 
 function createPublicRoutes(ctx) {
-    const { config, store, stories, publication, reading, topics, viewers, community, discussion, clusters, briefs } = ctx;
+    const { config, store, stories, publication, reading, topics, viewers, community, discussion, clusters, briefs, sharing } = ctx;
     const homeData = ctx.home || createHome({ store });
     const router = express.Router();
     router.use(viewers.middleware({ services: false }));
@@ -319,8 +319,41 @@ function createPublicRoutes(ctx) {
         const asJson = req.params.slug.endsWith('.json');
         const slug = asJson ? req.params.slug.slice(0, -5) : req.params.slug;
         const story = await stories.bySlug(slug);
-        if (!story || !story.published_revision || (story.state !== 'published' && story.state !== 'retracted')) {
-            if (story && story.state === 'unpublished') return messagePage(req, res, 410, 'Gone', 'This story was unpublished.', { href: '/', label: 'OpenVibe.News' });
+        const live = Boolean(story && story.published_revision && (story.state === 'published' || story.state === 'retracted'));
+        const editor = story && access.isEditor(config, req.viewer);
+        if (!story) return notFound(req, res);
+        if (!live) {
+            if (story.state === 'unpublished' && !editor) return messagePage(req, res, 410, 'Gone', 'This story was unpublished.', { href: '/', label: 'OpenVibe.News' });
+            // A draft is Only me, unless its editor shared it: then its head revision opens, and a stranger gets the gate.
+            const allowed = editor || (sharing ? await sharing.canView(req.viewer, story.id).catch(() => false) : false);
+            if (allowed) {
+                const head = await store.revisions.head(story.id);
+                if (head) return await renderStory(req, res, { story, rev: head, preview: true });
+            }
+            const row = sharing ? await sharing.shareOf(story.id).catch(() => null) : null;
+            if (row && row.audience === 'people') {
+                return send(req, res, 404, {
+                    title: 'A story on OpenVibe.News', description: 'A story shared with specific people on OpenVibe.News.',
+                    decision: pageDecision(req.path, { indexable: false }),
+                    body: pages.sharedGate({ id: story.id, signedInAs: req.viewer && req.viewer.user && req.viewer.user.username ? req.viewer.user.username : null,
+                        signInUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}` }),
+                });
+            }
+            return notFound(req, res);
+        }
+        // A published story the owner narrowed: the share row decides, editors aside. A story from before
+        // sharing has no row, and was public.
+        const publishedRow = sharing ? await sharing.shareOf(story.id).catch(() => null) : null;
+        if (!editor && publishedRow && !await sharing.canView(req.viewer, story.id).catch(() => false)) {
+            const row = await sharing.shareOf(story.id).catch(() => null);
+            if (row && row.audience === 'people') {
+                return send(req, res, 404, {
+                    title: 'A story on OpenVibe.News', description: 'A story shared with specific people on OpenVibe.News.',
+                    decision: pageDecision(req.path, { indexable: false }),
+                    body: pages.sharedGate({ id: story.id, signedInAs: req.viewer && req.viewer.user && req.viewer.user.username ? req.viewer.user.username : null,
+                        signInUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}` }),
+                });
+            }
             return notFound(req, res);
         }
         if (asJson) {

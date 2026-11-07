@@ -32,6 +32,8 @@ const B = 'usr_01JZ0000000000000000000BBB';
                 exempt: {
                     account_data_events: 'the ledger of requests itself: which export and deletion News applied',
                     news_index_revisions: "owner is the search-index document's owner (type/id), not a person; the row holds a revision and hash",
+                    share_members: 'jsonb subject: the SDK table map cannot name it; extraExport/extraErase cover the share rows',
+                    share_access_requests: 'jsonb subject: the SDK table map cannot name it; extraExport/extraErase cover the share rows',
                 },
             });
             assert.deepStrictEqual(missing, [], `a table with a person column is neither covered nor exempted: ${missing.join(', ')}`);
