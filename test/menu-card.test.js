@@ -1,10 +1,15 @@
 'use strict';
-// The menu's network card for OpenVibe.News (frame.menu-card@1): GET /.well-known/openvibe-menu.json serves the
-// "Top stories" array — the newest published stories, each linking to its page on openvibe.news. It validates
-// against frame.menu-cards@1, never carries a retracted story, is CORS * and is cached for five minutes.
+// The menu's network card for OpenVibe.News (frame.menu-card@1): GET /.well-known/openvibe-menu.json serves
+// "Top stories" — the published stories first published today (UTC) — and "Latest stories", the newest published
+// stories of any age, when nothing was published today. Each links to its page on openvibe.news. It validates
+// against frame.menu-cards@1, never carries a retracted, draft, unpublished or private story, is CORS * and is
+// cached for five minutes. The public listing is exercised on a real (PGlite) database too.
 const assert = require('assert');
 const contracts = require('openvibe-contracts');
-const { createMenuCard, cardFrom, ago, plain, CARD_TTL_S } = require('../server/menu-card');
+const { createMenuCard, cardFrom, startOfDay, ago, plain, CARD_TTL_S } = require('../server/menu-card');
+const { testDb } = require('./helpers/db');
+const { createStore } = require('../server/db');
+const { createStories } = require('../server/domain/stories');
 
 const NOW = Date.parse('2026-11-07T12:00:00Z');
 const item = (over = {}) => ({
@@ -12,10 +17,11 @@ const item = (over = {}) => ({
     published_at: NOW - 2 * 60 * 60_000, retracted: false, ...over,
 });
 
-// ── The card's shape and words ───────────────────────────────────────────
+// ── Today's card: shape, words and contract ─────────────────────────────
 const card = cardFrom([
     item(),
-    item({ headline: '<b>Second</b>\nstory', url: '/stories/second', outlets: ['Other', 'Third'], published_at: NOW - 26 * 60 * 60_000 }),
+    item({ headline: '<b>Second</b>\nstory', url: '/stories/second', outlets: ['Other', 'Third'], published_at: NOW - 5 * 60 * 60_000 }),
+    item({ headline: 'Yesterday', url: '/stories/yesterday', outlets: ['Old Wire'], published_at: NOW - 26 * 60 * 60_000 }),
 ], NOW);
 const checked = contracts.validate('frame.menu-cards@1', [card]);
 assert.ok(checked.valid, JSON.stringify(checked.errors));
@@ -28,19 +34,32 @@ assert.strictEqual(card.ttl_s, CARD_TTL_S);
 assert.strictEqual(card.updated_at, new Date(NOW).toISOString());
 assert.deepStrictEqual(card.items, [
     { title: 'A story readers can check', meta: 'Example News · 2h ago', url: 'https://openvibe.news/stories/a-story' },
-    { title: 'Second story', meta: 'Other · 1d ago', url: 'https://openvibe.news/stories/second' },
+    { title: 'Second story', meta: 'Other · 5h ago', url: 'https://openvibe.news/stories/second' },
 ]);
 assert.deepStrictEqual(card.more, { label: 'All stories', url: 'https://openvibe.news/' });
 assert.ok(card.title.length <= 60);
 for (const it of card.items) assert.ok(it.title.length <= 80 && (!it.meta || it.meta.length <= 120) && it.url.startsWith('https://openvibe.news/'));
 
-// Retracted and incomplete stories never enter the card, and at most six stories are sent.
+// Nothing today: the card falls back to the newest published stories of any age and says "Latest stories".
+const latest = cardFrom([
+    item({ headline: 'Yesterday', url: '/stories/yesterday', published_at: NOW - 26 * 60 * 60_000 }),
+    item({ headline: 'Last week', url: '/stories/last-week', published_at: NOW - 8 * 24 * 60 * 60_000 }),
+], NOW);
+assert.strictEqual(latest.title, 'Latest stories');
+assert.deepStrictEqual(latest.items.map((i) => i.title), ['Yesterday', 'Last week']);
+assert.ok(contracts.validate('frame.menu-cards@1', [latest]).valid);
+const empty = cardFrom([], NOW);
+assert.deepStrictEqual(empty.items, []);
+assert.strictEqual(empty.title, 'Latest stories');
+assert.ok(contracts.validate('frame.menu-cards@1', [empty]).valid);
+
+// Retracted and incomplete stories never enter the card, and at most five stories are sent.
 assert.deepStrictEqual(cardFrom([item({ retracted: true })], NOW).items, []);
 assert.deepStrictEqual(cardFrom([item({ headline: '  ' })], NOW).items, []);
 assert.deepStrictEqual(cardFrom([item({ url: 'https://elsewhere.example/x' })], NOW).items, []);
 assert.deepStrictEqual(cardFrom(null, NOW).items, []);
 const many = Array.from({ length: 9 }, (_, i) => item({ headline: `Story ${i}`, url: `/stories/${i}` }));
-assert.strictEqual(cardFrom(many, NOW).items.length, 6);
+assert.strictEqual(cardFrom(many, NOW).items.length, 5);
 
 // Text is plain words and the meta line names the outlet and the time ago.
 assert.strictEqual(plain('<img src=x onerror=alert(1)>Nova\n\t live ', 80), 'Nova live');
@@ -48,6 +67,7 @@ assert.strictEqual(plain('x'.repeat(200), 80).length, 80);
 assert.strictEqual(ago(NOW - 30_000, NOW), 'just now');
 assert.strictEqual(ago(NOW - 3 * 60 * 60_000, NOW), '3h ago');
 assert.strictEqual(ago(null, NOW), '');
+assert.strictEqual(startOfDay(NOW), Date.parse('2026-11-07T00:00:00Z'));
 
 // ── The five-minute cache and the route's headers ───────────────────────
 (async () => {
@@ -83,5 +103,36 @@ assert.strictEqual(ago(null, NOW), '');
     t += CARD_TTL_S * 1000 + 1;
     assert.strictEqual(await flaky.card(), good);
 
-    console.log('menu card: shape, contract, retracted filter, plain text, 5 min cache, CORS and last-good card');
+    // ── The public listing: published, public rows only, newest first ──
+    const handle = await testDb();
+    const db = handle.db;
+    try {
+        const store = createStore(db, { now: () => NOW });
+        const stories = createStories({ store, config: { baseUrl: 'https://openvibe.news' }, publication: {}, clusters: {}, outbox: {} });
+        const insert = db.prepare(`INSERT INTO news_stories
+            (id, slug, working_headline, state, published_revision, first_published_at, published_at, created_by, created_at, updated_at, audience)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'usr_editor', ?, ?, ?)`);
+        const row = (id, state, first, audience = 'public', revision = 1) =>
+            insert.run(id, `story-${id}`, `Headline ${id}`, state, revision, first, first, NOW, NOW, audience);
+        await row('sty_today', 'published', NOW - 60 * 60_000);
+        await row('sty_retracted', 'retracted', NOW - 3 * 60 * 60_000);
+        await row('sty_old', 'published', NOW - 26 * 60 * 60_000);
+        await row('sty_draft', 'draft', null, 'private', null);
+        await row('sty_unpublished', 'unpublished', null, 'public', null);
+        await row('sty_private', 'published', NOW - 2 * 60 * 60_000, 'private');
+        const { stories: rows } = await stories.listPublished({ limit: 20 });
+        assert.deepStrictEqual(rows.map((r) => r.id), ['sty_today', 'sty_retracted', 'sty_old'],
+            'drafts, unpublished and private stories never reach the public listing; retracted ones stay for the card to drop');
+        const asItem = (r) => ({ headline: r.working_headline, url: `/stories/${r.slug}`, outlets: ['Wire'], published_at: r.first_published_at, retracted: r.state === 'retracted' });
+        const served = cardFrom(rows.map(asItem), NOW);
+        assert.strictEqual(served.title, 'Top stories');
+        assert.deepStrictEqual(served.items.map((i) => i.title), ['Headline sty_today']);
+        const fallback = cardFrom(rows.filter((r) => r.first_published_at < startOfDay(NOW)).map(asItem), NOW);
+        assert.strictEqual(fallback.title, 'Latest stories');
+        assert.deepStrictEqual(fallback.items.map((i) => i.title), ['Headline sty_old']);
+    } finally {
+        await handle.close();
+    }
+
+    console.log('menu card: top/latest, contract, public listing, retracted filter, plain text, 5 min cache, CORS and last-good card');
 })().catch((err) => { console.error(err); process.exit(1); });
