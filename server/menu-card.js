@@ -7,7 +7,9 @@
 // (stories.listPublished + reading.listItems), so the card can only show what an anonymous reader can already
 // read: drafts, unpublished and private stories, and retracted stories never appear.
 // The file is public and CORS *, cached for five minutes (the card's ttl); Network fetches it every five minutes.
-// With nothing published at all the card is still served, with no items, and Network skips it.
+// With no published story at all (11-07: none yet), the card is "Latest AI briefs": OpenVibe.AI's source-linked briefs,
+// each row saying it is one and how many reports it rests on, the same briefs the home shows. Only with neither is the
+// card served empty, and Network skips it.
 const BASE = 'https://openvibe.news';
 const CARD_ID = 'top-stories';
 const SITE = 'news';
@@ -90,8 +92,39 @@ function cardFrom(items, at = Date.now()) {
     };
 }
 
-/** The route. `load(at)` returns reading.listItems() rows; `now` is injectable for the test. */
-function createMenuCard({ load, now = Date.now } = {}) {
+/**
+ * The card when no story is published: the newest AI briefs (briefs.latest(), summaries only, no stub, with text),
+ * each linking to its /briefs/:cluster_id page, its meta saying it is an AI brief and how many reports it rests on.
+ */
+function cardFromBriefs(briefs, at = Date.now()) {
+    const out = [];
+    for (const b of Array.isArray(briefs) ? briefs : []) {
+        if (!b || b.kind !== 'summary' || b.stub || !Array.isArray(b.paragraphs) || !b.paragraphs.length) continue;
+        const title = plain(b.headline || b.label, 80);
+        const id = String(b.cluster_id || '');
+        if (!title || !/^[A-Za-z0-9_-]{1,80}$/.test(id)) continue;
+        const reports = Number(b.item_count) || 0;
+        const meta = ['AI brief', reports ? `${reports} ${reports === 1 ? 'report' : 'reports'}` : '', ago(b.window_end, at)].filter(Boolean).join(' · ');
+        out.push({ title, meta: plain(meta, 120), url: `${BASE}/briefs/${id}` });
+        if (out.length >= LIMIT) break;
+    }
+    return {
+        id: CARD_ID,
+        site: SITE,
+        title: 'Latest AI briefs',
+        kind: 'rows',
+        items: out,
+        more: { label: 'All AI briefs', url: `${BASE}/briefs` },
+        updated_at: new Date(at).toISOString(),
+        ttl_s: CARD_TTL_S,
+    };
+}
+
+/**
+ * The route. `load(at)` returns reading.listItems() rows; `loadBriefs(at)` (optional) returns briefs.latest() rows
+ * for when no story is published; `now` is injectable for the test.
+ */
+function createMenuCard({ load, loadBriefs = null, now = Date.now } = {}) {
     let cached = null;
     let cachedAt = 0;
     let pending = null;
@@ -102,7 +135,9 @@ function createMenuCard({ load, now = Date.now } = {}) {
         if (pending) return pending;
         pending = (async () => {
             try {
-                cached = cardFrom(await load(at), at);
+                let next = cardFrom(await load(at), at);
+                if (!next.items.length && loadBriefs) next = cardFromBriefs(await loadBriefs(at), at);
+                cached = next;
                 cachedAt = at;
             } catch {
                 // Keep the last good card rather than publish an empty one on a database hiccup.
@@ -124,4 +159,4 @@ function createMenuCard({ load, now = Date.now } = {}) {
     return { card, handler, cardFrom, cacheMs: CACHE_MS };
 }
 
-module.exports = { createMenuCard, cardFrom, startOfDay, ago, plain, BASE, CARD_ID, SITE, CARD_TTL_S, DAY, LIMIT };
+module.exports = { createMenuCard, cardFrom, cardFromBriefs, startOfDay, ago, plain, BASE, CARD_ID, SITE, CARD_TTL_S, DAY, LIMIT };
