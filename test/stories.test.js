@@ -120,6 +120,12 @@ const BODY = [
         assert.match(page.text, /"@type":"NewsArticle"/);
         assert.match(page.text, /Mission announcements/);
         assert.match(page.text, /2026-09-22<\/time> — Europa Clipper lifts off/);
+        // The Ask your agent chip (openvibe-shared 4.135.0): beside Share, the story's headline and public address in its text.
+        const asks = page.text.match(/<button[^>]*data-ov-ask[^>]*>/g) || [];
+        assert.strictEqual(asks.length, 1, 'one Ask your agent chip: ' + asks.join(' | '));
+        assert.ok(asks[0].includes('data-ov-ask="About the story “Europa Clipper launches for Jupiter” (https://openvibe.news/stories/europa-clipper-launches-for-jupiter): "'), asks[0]);
+        assert.ok(asks[0].includes('class="ovk-ask ovk-btn'), 'the shared kit chip');
+        assert.match(page.text, /<link rel="stylesheet" href="\/shared\/kit\.css\?v=[0-9a-f]+">/, 'the kit’s look is on the page');
 
         const json = (await t.get('/stories/europa-clipper-launches-for-jupiter.json')).json();
         assert.strictEqual(json.claims.length, 3);
@@ -227,6 +233,20 @@ const BODY = [
         assert.strictEqual((await t.events('news.index_document.deleted')).length, 1);
         assert.strictEqual((await t.events('news.story.unpublished')).length, 1);
         assert.doesNotMatch((await t.get('/sitemaps/stories.xml')).text, /europa-clipper-launches/);
+    });
+
+    await check('the ask chip’s text is the headline and address, and kit.askAgent escapes it', async () => {
+        const html = String(require('../server/render/pages').storyPage({
+            headline: 'Quotes "and" <tags> & more', url: 'https://openvibe.news/stories/quotes',
+            story: { id: 'st_1', state: 'published' }, rev: { number: 1 },
+            authors: [], first_published_at: null, updated_at: null, topic: null, disclosure: null,
+            paragraphs: [], timeline: [], perspectives: [], corrections: [], retraction: null, upstream: [],
+            sources: [], outletGroups: [], path: '/stories/quotes',
+        }, { breadcrumbs: [], jsonUrl: '/stories/quotes.json' }));
+        const asks = html.match(/<button[^>]*data-ov-ask[^>]*>/g) || [];
+        assert.strictEqual(asks.length, 1, asks.join(' | '));
+        assert.ok(asks[0].includes('data-ov-ask="About the story “Quotes &quot;and&quot; &lt;tags&gt; &amp; more” (https://openvibe.news/stories/quotes): "'), asks[0]);
+        assert.ok(!asks[0].includes('<tags>'), 'the headline is escaped in the chip');
     });
 
     await t.close();

@@ -308,6 +308,7 @@ function createPublicRoutes(ctx) {
             decision, canonical: m.url, type: 'article',
             author: m.authors.length ? m.authors.map((a) => a.name).join(', ') : undefined,
             published: m.first_published_at, modified: m.updated_at,
+            styles: ['kit.css'],
             feeds: feedsFor('/'),
             jsonLd: preview ? [] : [reading.storyJsonLd(m), seo.structuredData.breadcrumbs(crumbs.map((c) => ({ name: c.name, url: c.url ? publication.abs(c.url) : m.url })))],
             body: pages.storyPage(m, {
