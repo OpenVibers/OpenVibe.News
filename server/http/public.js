@@ -335,7 +335,7 @@ function createPublicRoutes(ctx) {
                 return send(req, res, 404, {
                     title: 'A story on OpenVibe.News', description: 'A story shared with specific people on OpenVibe.News.',
                     decision: pageDecision(req.path, { indexable: false }),
-                    body: pages.sharedGate({ id: story.id, signedInAs: req.viewer && req.viewer.subject ? req.viewer.subject : null,
+                    body: pages.sharedGate({ id: story.id, signedInAs: req.viewer && req.viewer.user && req.viewer.user.username ? req.viewer.user.username : null,
                         signInUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}` }),
                 });
             }
@@ -350,7 +350,7 @@ function createPublicRoutes(ctx) {
                 return send(req, res, 404, {
                     title: 'A story on OpenVibe.News', description: 'A story shared with specific people on OpenVibe.News.',
                     decision: pageDecision(req.path, { indexable: false }),
-                    body: pages.sharedGate({ id: story.id, signedInAs: req.viewer && req.viewer.subject ? req.viewer.subject : null,
+                    body: pages.sharedGate({ id: story.id, signedInAs: req.viewer && req.viewer.user && req.viewer.user.username ? req.viewer.user.username : null,
                         signInUrl: `/auth/login?next=${encodeURIComponent(req.originalUrl)}` }),
                 });
             }

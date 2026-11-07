@@ -48,7 +48,7 @@ const { boot, check, done, launchReports } = require('./helpers/boot');
         assert.ok(member.text.includes('SECRET-LOOI'));
         const strangerPage = await t.get(`/stories/${story.slug}`, { as: stranger });
         assert.strictEqual(strangerPage.status, 404);
-        assert.ok(strangerPage.text.includes('shared with specific people') && strangerPage.text.includes('OVShare.gate'));
+        assert.ok(strangerPage.text.includes('shared with specific people') && strangerPage.text.includes('data-ov-share-gate'));
         assert.ok(!strangerPage.text.includes('The LOOI bridge notes'), 'no headline');
         const anon = await t.get(`/stories/${story.slug}`);
         assert.strictEqual(anon.status, 404);
