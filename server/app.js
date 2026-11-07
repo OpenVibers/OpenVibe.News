@@ -210,12 +210,13 @@ async function createApp(opts = {}) {
         },
     }));
 
-    // The menu's network card (frame.menu-cards@1): the newest published stories, read anonymously. It is the
-    // same public listing the home page uses, so a draft or a retracted story never reaches the card.
+    // The menu's network card (frame.menu-cards@1): today's published stories, else the newest of any age, read
+    // anonymously. It is the same public listing the home page uses, so a draft, private or retracted story never
+    // reaches the card. Twenty rows leave room for retracted ones while the card still fills its five.
     {
         const menuCard = createMenuCard({
             load: async () => {
-                const { stories: rows } = await stories.listPublished({ limit: 6 });
+                const { stories: rows } = await stories.listPublished({ limit: 20 });
                 return await reading.listItems(rows);
             },
         });
