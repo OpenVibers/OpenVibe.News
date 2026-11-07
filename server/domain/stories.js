@@ -26,6 +26,8 @@ const authorship = require('openvibe-publishing/authorship');
 const seo = require('openvibe-publishing/seo');
 const { ApiError } = require('../http/errors');
 const { actorRef, canPublish } = require('./publication');
+const reviewKind = require('./review-kind');
+const { checkCapability, CAPABILITIES } = require('../auth/capabilities');
 const access = require('./access');
 
 const MAX_PARAGRAPHS = 60;
@@ -107,6 +109,15 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
     }
 
     function actingEditor(viewer) { return access.requireEditor(config, viewer); }
+
+    /**
+     * The AI editor records a review as itself: a first-party service principal (svc:…) with no
+     * person named, holding news.review.ai_editor. A service acting for a person is that person.
+     */
+    function isAiEditor(viewer) {
+        if (!viewer || viewer.kind !== 'service' || viewer.subject || !/^svc:/.test(String(viewer.service))) return false;
+        return checkCapability(viewer.claims, CAPABILITIES.REVIEW_AI_EDITOR).allowed;
+    }
 
     // ── The working source table, timeline and perspectives ─
 
@@ -582,8 +593,10 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                 const rev = story.state === 'published' && story.published_revision ? await store.revisions.get(story.id, story.published_revision) : head;
                 const rec = rev && rev.meta && rev.meta.authorship;
                 if (!rec || !(rec.mode === 'ai' || rec.mode === 'hybrid' || rec.stubProvider)) continue;
-                const review = await store.reviews.latest(story.id, rev.number);
-                if (review) continue;
+                const kinds = await store.reviews.latestByKind(story.id, rev.number);
+                if (kinds.person) continue;   // a person's decision, approved or rejected, has been made
+                if (kinds.ai_editor && kinds.ai_editor.decision === 'approved') continue;   // the AI editor approved it
+                const ai = kinds.ai_editor;
                 const decision = await publication.decide(story, rev, { state: story.state });
                 items.push({
                     site: 'news', kind: 'news_story', id: story.id,
@@ -592,6 +605,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                     url: publication.storyUrl(story), editUrl: `/edit/stories/${story.id}`,
                     createdAt: new Date(rev.createdAt).toISOString(),
                     reasons: decision.reasons.map((r) => ({ ...r, text: (seo.REASON_BY_CODE[r.code] || {}).description || r.code })),
+                    reviewed: ai ? { kind: reviewKind.AI_EDITOR, decision: ai.decision, by: ai.reviewer, at: ai.reviewedAt, label: reviewKind.aiEditorVerdict(ai) } : null,
                     review: { method: 'POST', path: `/api/v1/stories/${encodeURIComponent(story.id)}/reviews` },
                     ...(story.state !== 'published' ? { publish: { method: 'POST', path: `/api/v1/stories/${encodeURIComponent(story.id)}/publish` } } : {}),
                 });
@@ -599,14 +613,21 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
             return items.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
         },
 
-        /** A person's review of one revision (what lets an AI draft be published and indexed). */
+        /**
+         * A review of one revision: a signed-in editor's (what lets an AI draft be published and
+         * indexed), or the AI editor's — a svc:… service principal acting as itself with
+         * news.review.ai_editor — recorded with kind `ai_editor`, never as a person's review.
+         */
         async review(viewer, story, { revision, decision, note } = {}, { traceparent } = {}) {
-            if (!viewer || viewer.kind !== 'user' || !viewer.subject) throw new ApiError(403, 'review.person_required', 'Only a signed-in person can review a revision');
-            actingEditor(viewer);
+            const aiEditor = isAiEditor(viewer);
+            if (!aiEditor && (!viewer || viewer.kind !== 'user' || !viewer.subject)) throw new ApiError(403, 'review.person_required', 'Only a signed-in person (or the AI editor) can review a revision');
+            if (!aiEditor) actingEditor(viewer);
             const n = parseInt(revision, 10);
             if (!await store.revisions.get(story.id, n)) throw new ApiError(404, 'revision.not_found', `No revision ${revision}`);
             return await store.tx(async () => {
-                const row = await store.reviews.record({ entityId: story.id, revision: n, reviewer: viewer.subject, decision, note });
+                const row = aiEditor
+                    ? await store.reviews.recordAiEditor({ entityId: story.id, revision: n, principal: viewer.service, decision, note })
+                    : await store.reviews.record({ entityId: story.id, revision: n, reviewer: viewer.subject, decision, note });
                 if (story.state === 'published') await publication.syncIndex(await q.byId.get(story.id), { traceparent });
                 return row;
             });

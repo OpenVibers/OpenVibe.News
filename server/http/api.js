@@ -38,7 +38,7 @@
 const express = require('express');
 const contracts = require('openvibe-contracts');
 const { run, jsonBody, ApiError, privateNoStore } = require('./errors');
-const { guard } = require('../auth/viewer');
+const { guard, guardReview } = require('../auth/viewer');
 const access = require('../domain/access');
 
 function cors(origins) {
@@ -96,8 +96,10 @@ function createApi(ctx) {
 
     // A person reviews an AI brief. The review log is append-only; the brief page leaves noindex only
     // while the approval still matches the brief (a remake waits for a person again).
-    router.post('/briefs/:id/reviews', B('news.story.publish'), jsonBody, run(async (req) => {
-        access.requireEditor(config, req.viewer);
+    router.post('/briefs/:id/reviews', guardReview, B('news.story.publish'), jsonBody, run(async (req) => {
+        // A service acting as itself is the AI editor (guardReview checked news.review.ai_editor); a
+        // person, or a service acting for one, must still be an editor.
+        if (req.viewer.kind !== 'service' || req.viewer.subject) access.requireEditor(config, req.viewer);
         if (!briefs) throw new ApiError(503, 'briefs.unavailable', 'AI briefs are not configured');
         const b = req.body || {};
         return { review: await briefs.review(req.viewer, req.params.id, { kind: b.kind, tone: b.tone, decision: b.decision, note: b.note }) };
@@ -227,7 +229,7 @@ function createApi(ctx) {
         const out = await stories.retract(req.viewer, story, { note: b.note }, tp(req));
         return { changed: out.changed, story: await storyDto(out.story) };
     });
-    router.post('/stories/:id/reviews', B('news.story.publish'), jsonBody, run(async (req) => {
+    router.post('/stories/:id/reviews', guardReview, B('news.story.publish'), jsonBody, run(async (req) => {
         const story = await mustStory(req);
         const b = req.body || {};
         return { review: await stories.review(req.viewer, story, { revision: b.revision, decision: b.decision, note: b.note }, tp(req)) };

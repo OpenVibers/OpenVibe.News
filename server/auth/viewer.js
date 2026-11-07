@@ -21,7 +21,7 @@
 const contracts = require('openvibe-contracts');
 const { verifyServiceToken } = require('openvibe-sdk/auth');
 const { claimsToUser, decodeJwtPayload } = require('openvibe-sdk/sso');
-const { checkCapability } = require('./capabilities');
+const { checkCapability, CAPABILITIES } = require('./capabilities');
 
 const { ids, http, staff: staffMap } = contracts;
 const PRINCIPAL_SUB = /^(svc|app|mod):/;
@@ -123,4 +123,16 @@ function guard(cap) {
     };
 }
 
-module.exports = { createViewerResolver, guard, ANONYMOUS, ViewerError };
+/**
+ * The review routes' guard: a service acting as itself (no person named) is the AI editor and
+ * needs news.review.ai_editor; a person, or a service acting for one, is judged as before.
+ */
+function guardReview(req, res, next) {
+    const v = req.viewer;
+    if (!v || v.kind !== 'service' || v.subject) return next();
+    const c = checkCapability(v.claims, CAPABILITIES.REVIEW_AI_EDITOR);
+    if (c.allowed) return next();
+    return http.sendProblem(res, 403, c.code, { detail: c.reason, ctx: req.ov });
+}
+
+module.exports = { createViewerResolver, guard, guardReview, ANONYMOUS, ViewerError };

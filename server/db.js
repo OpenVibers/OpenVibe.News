@@ -33,6 +33,7 @@ const { createDb } = require('openvibe-sdk/db');
 const { createRevisionStore } = require('openvibe-publishing/revisions');
 const { createCitationStore } = require('openvibe-publishing/citations');
 const { createReviewLog } = require('openvibe-publishing/authorship');
+const { createReviewKindLog } = require('./domain/review-kind');
 const { createIndexSequencer } = require('openvibe-publishing/index-hooks');
 const { createDiscussionRefs } = require('openvibe-publishing/discussion');
 
@@ -70,7 +71,8 @@ function createStore(db, { now = () => Date.now() } = {}) {
         now,
         revisions,
         citations: createCitationStore(db, { prefix: 'news_story', now, revisions }),
-        reviews: createReviewLog(db, { prefix: 'news_story', now }),
+        // The shared log records a person's review; the product adds the ai_editor kind and keeps the kinds of both.
+        reviews: createReviewKindLog(createReviewLog(db, { prefix: 'news_story', now }), { db, prefix: 'news_story', now }),
         sequencer: createIndexSequencer(db, { prefix: 'news', now }),
         discussion: createDiscussionRefs(db, { prefix: 'news_story', now }),
         tx: async (fn) => await db.tx(() => fn()),
