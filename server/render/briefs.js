@@ -49,9 +49,19 @@ function reportsOnlyPage({ cluster, reports, outlets, minOutlets }) {
 }
 
 /** /briefs/:id */
-function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake, notice = null, enough = true, minOutlets = 2, review = null }) {
+function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake, notice = null, enough = true, minOutlets = 2, review = null, reviews = null }) {
     const outlets = [...new Set(reports.map((r) => r.outlet))];
     if (!enough) return reportsOnlyPage({ cluster, reports, outlets, minOutlets });
+    // Two kinds of approval can stand behind a brief: a person's and the AI editor's. Each is named.
+    const kinds = reviews || { person: review, ai_editor: null };
+    const reviewLabels = [];
+    if (kinds.person && kinds.person.decision === 'approved') {
+        reviewLabels.push(h`Reviewed by a person <time datetime="${new Date(kinds.person.reviewedAt).toISOString()}">${time(kinds.person.reviewedAt)}</time>.`);
+    }
+    if (kinds.ai_editor && kinds.ai_editor.decision === 'approved') {
+        reviewLabels.push(h`Checked by OpenVibe's AI editor <time datetime="${new Date(kinds.ai_editor.reviewedAt).toISOString()}">${time(kinds.ai_editor.reviewedAt)}</time>.`);
+    }
+    const reviewed = reviewLabels.map((l) => `${l} `).join('');
     const shown = brief && !brief.stub ? brief : null;
     const tabs = h`<nav class="brief-tones" aria-label="How to tell it">${TONES.map(([t, label]) => (t === tone
         ? h`<span class="brief-tone on" aria-current="page">${label}</span>`
@@ -59,7 +69,7 @@ function briefPage({ cluster, reports, brief, fresh, tone, perspectives, canMake
     const persp = perspectives && !perspectives.stub ? perspectives : null;
     return String(h`<header class="site-header"><p class="eyebrow"><span class="badge badge-ai">AI brief</span> from ${coverage(reports, outlets)}</p>
 <h1>${shown && shown.headline ? shown.headline : cluster.label}</h1>
-<p class="meta">${review ? h`Reviewed by a person <time datetime="${new Date(review.reviewedAt).toISOString()}">${time(review.reviewedAt)}</time>. ` : ''}${AI_NOTE}</p></header>
+<p class="meta">${reviewed ? raw(reviewed) : ''}${AI_NOTE}</p></header>
 ${notice ? h`<p class="notice">${notice}</p>` : ''}
 ${tabs}
 <section class="brief" aria-label="The brief">

@@ -12,6 +12,7 @@
  */
 const seo = require('openvibe-publishing/seo');
 const { disclosure } = require('./publication');
+const reviewKind = require('./review-kind');
 
 const iso = (v) => (v == null ? null : new Date(v).toISOString());
 
@@ -48,6 +49,7 @@ function createReading({ store, config, stories, publication, people, topics }) 
         }
         const rec = publication.authorshipOf(r);
         const review = await publication.reviewOf(story, r);
+        const kinds = await publication.reviewsOf(story, r);
         const authorSubjects = rec && Array.isArray(rec.authors) ? rec.authors : [];
         const who = authorSubjects.length ? await people.many(authorSubjects) : new Map();
         const authors = authorSubjects.map((s) => who.get(s)).filter((p) => p && p.known).map((p) => ({ name: p.name, username: p.username }));
@@ -68,7 +70,7 @@ function createReading({ store, config, stories, publication, people, topics }) 
                 const s = snap.find((x) => x.id === f.source_item_id);
                 return { kind: f.kind, n: s ? s.n : null, outlet: s ? s.outlet : null, at: iso(f.created_at) };
             }),
-            authorship: rec, review, disclosure: rec ? disclosure(rec, review) : null, authors,
+            authorship: rec, review, reviews: kinds, labels: reviewKind.labelsFor(kinds), disclosure: rec ? disclosure(rec, kinds) : null, authors,
             decision: await publication.decide(story, r),
             first_published_at: iso(story.first_published_at), updated_at: r.createdAt, published_at: iso(story.published_at),
         };
@@ -81,7 +83,17 @@ function createReading({ store, config, stories, publication, people, topics }) 
             headline: m.headline, headline_sources: m.headline_sources,
             topic: m.topic ? { slug: m.topic.slug, name: m.topic.name, url: publication.abs(publication.topicPath(m.topic)) } : null,
             first_published_at: m.first_published_at, updated_at: m.updated_at,
-            authorship: m.authorship ? { mode: m.authorship.mode, workflow: m.authorship.workflow ? m.authorship.workflow.id : null, reviewed_by_person: Boolean(m.review && m.review.decision === 'approved'), disclosure: m.disclosure ? m.disclosure.long : null } : null,
+            authorship: m.authorship ? {
+                mode: m.authorship.mode, workflow: m.authorship.workflow ? m.authorship.workflow.id : null,
+                reviewed: Boolean(m.labels && m.labels.length),
+                labels: m.labels || [],
+                reviewed_by_person: Boolean(m.reviews && m.reviews.person && m.reviews.person.decision === 'approved'),
+                disclosure: m.disclosure ? m.disclosure.long : null,
+                reviews: {
+                    person: m.reviews && m.reviews.person ? { decision: m.reviews.person.decision, at: m.reviews.person.reviewedAt } : null,
+                    ai_editor: m.reviews && m.reviews.ai_editor ? { decision: m.reviews.ai_editor.decision, at: m.reviews.ai_editor.reviewedAt } : null,
+                },
+            } : null,
             authors: m.authors,
             claims: m.paragraphs.map((p) => ({ text: p.text, sources: p.sources, supported: p.supported })),
             sources: m.sources,

@@ -1,0 +1,24 @@
+{
+  "id": "news.review.ai_editor",
+  "version": "1.0",
+  "owner": "news",
+  "status": "active",
+  "visibility": "first-party",
+  "description": "Record the editorial queue's AI editor decision (approved or rejected) on a story revision or an AI brief, as the first-party service principal acting as itself (a svc: principal with no X-OV-Subject). This is never a person's review: an approval lets AI text publish and index and the page says \"Checked by OpenVibe's AI editor\" with its date, never \"Reviewed by a person\". Granted only to the orchestrator's service principal.",
+  "permissions": [
+    "news:write"
+  ],
+  "resourceConstraints": [
+    "none"
+  ],
+  "quotaClass": "news-write",
+  "events": [
+    "news.story.updated",
+    "news.index_document.upserted",
+    "news.index_document.deleted"
+  ],
+  "implementedBy": [
+    "POST /api/v1/stories/:id/reviews",
+    "POST /api/v1/briefs/:id/reviews"
+  ]
+}

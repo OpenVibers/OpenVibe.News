@@ -186,6 +186,11 @@ function createPublicRoutes(ctx) {
         // reviewed: a remake changes created_at, so an old approval no longer applies.
         const review = await briefs.reviewOf(id, { kind: 'summary', tone });
         const reviewed = tone === 'neutral' && got.enough && got.fresh && briefs.isApproved(got.brief, review);
+        // A brief can carry both kinds of approval (a person's, the AI editor's): the page names each,
+        // but only a review of this exact text — a remake changes created_at and waits again.
+        const kindReviews = reviewed && got.brief ? await briefs.reviewsOf(id, { kind: 'summary', tone }) : { person: null, ai_editor: null };
+        const forText = (r) => (r && Number(r.briefCreatedAt) === Number(got.brief.created_at) ? r : null);
+        const reviews = { person: forText(kindReviews.person), ai_editor: forText(kindReviews.ai_editor) };
         const canonical = `${config.baseUrl}/briefs/${id}`;
         const decision = reviewed
             ? seo.evaluate({ state: 'published', visibility: 'public', canonicalUrl: canonical, wordCount: 0 }, { policy: { minWords: 0 }, now: store.now() })
@@ -194,7 +199,7 @@ function createPublicRoutes(ctx) {
             title: got.enough ? `${got.brief && got.brief.headline ? got.brief.headline : got.cluster.label} (AI brief)` : `${got.cluster.label} (reports)`,
             description: got.enough ? 'An AI summary of the reports on this subject, every paragraph linked to its reports.' : 'The reports on this subject so far. Too few outlets have covered it for an AI summary.',
             decision, canonical, localStyles: ['css/briefs.css'],
-            body: briefPages.briefPage({ ...got, tone, perspectives: persp ? persp.brief : null, canMake: canMake(), notice, review: reviewed ? review : null }),
+            body: briefPages.briefPage({ ...got, tone, perspectives: persp ? persp.brief : null, canMake: canMake(), notice, review: reviewed ? review : null, reviews }),
         }, { cacheable: !notice && (reviewed || !got.brief) });
     }));
 

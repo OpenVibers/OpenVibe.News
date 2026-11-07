@@ -24,7 +24,8 @@
     "news.source.attach",
     "news.timeline.update",
     "news.perspective.update",
-    "news.topic.manage"
+    "news.topic.manage",
+    "news.review.ai_editor"
   ],
   "eventsProduced": [
     "news.source.ingested",

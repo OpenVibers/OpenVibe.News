@@ -22,6 +22,7 @@
 const seo = require('openvibe-publishing/seo');
 const hooks = require('openvibe-publishing/index-hooks');
 const authorship = require('openvibe-publishing/authorship');
+const reviewKind = require('./review-kind');
 const { createPublication: createPublicationGlue } = require('openvibe-publishing/publication');
 const { normalize } = require('openvibe-publishing/ingest');
 
@@ -31,21 +32,37 @@ const OWNER = 'news';
 
 /**
  * AI-assisted text (hybrid: a person edited an AI draft) is held like AI-generated text: hidden
- * from indexes and not publishable until a person records an approving review of that revision.
+ * from indexes and not publishable until a person or the AI editor records an approving review of
+ * that revision.
  */
 function gateAuthorship(rec, review) {
-    if (rec.mode === 'hybrid') return { authorship: { mode: 'ai', reviewed: authorship.isReviewed(rec, review) }, ...(rec.stubProvider ? { stubProvider: true } : {}) };
-    return authorship.gateFacts(rec, review);
+    const reviewed = reviewKind.approved(review);
+    return { authorship: { mode: rec.mode === 'hybrid' ? 'ai' : rec.mode, reviewed }, ...(rec.stubProvider ? { stubProvider: true } : {}) };
 }
 function canPublish(rec, review) {
-    if (rec.mode === 'hybrid' && !authorship.isReviewed(rec, review)) return { ok: false, reason: 'ai_assisted_unreviewed' };
-    return authorship.canPublish(rec, review);
+    if (rec.mode === 'hybrid' && !reviewKind.approved(review)) return { ok: false, reason: 'ai_assisted_unreviewed' };
+    if (authorship.needsReview(rec) && !reviewKind.approved(review)) return { ok: false, reason: rec.mode === 'ai' ? 'ai_generated_unreviewed' : 'stub_provider' };
+    return { ok: true, reason: null };
 }
-function disclosure(rec, review) {
-    const d = rec ? authorship.disclosure(rec, review) : null;
-    if (!d || rec.mode !== 'hybrid') return d;
-    const reviewed = authorship.isReviewed(rec, review);
-    return { ...d, long: `${d.long.replace(/\.\s*$/, '')}. ${reviewed ? 'Reviewed by a person.' : 'Not yet reviewed by a person.'}` };
+/**
+ * The disclosure at the item, with the review of each kind (a person's, the AI editor's, both):
+ * "Checked by OpenVibe's AI editor on 2026-11-06" is never "Reviewed by a person".
+ */
+function disclosure(rec, kinds = { person: null, ai_editor: null }) {
+    const d = rec ? authorship.disclosure(rec, null) : null;
+    if (!d) return null;
+    const person = reviewKind.isPersonReview(kinds.person);
+    const ai = reviewKind.aiEditorLabel(kinds.ai_editor);
+    const hybrid = rec.mode === 'hybrid';
+    if (!person && !ai) {
+        if (!hybrid) return { ...d, reviewed: false };   // the library says "not yet reviewed by a person"
+        return { ...d, long: `${d.long.replace(/\.\s*$/, '')}. Not yet reviewed by a person.`, reviewed: false };
+    }
+    const base = d.long.replace(/,\s*(?:not yet )?reviewed by a person\.?\s*$/, '').replace(/\.\s*$/, '');
+    let long = base;
+    if (person) long += hybrid ? '. Reviewed by a person.' : ', reviewed by a person.';
+    if (ai) long += `${long.endsWith('.') ? ' ' : '. '}${ai}.`;
+    return { ...d, long, reviewed: true };
 }
 
 function createPublication({ store, config, outbox, indexnow }) {
@@ -67,6 +84,8 @@ function createPublication({ store, config, outbox, indexnow }) {
 
     const authorshipOf = (rev) => (rev && rev.meta && rev.meta.authorship) || null;
     const reviewOf = async (story, rev) => (rev ? await store.reviews.latest(story.id, rev.number) : null);
+    /** The review of each kind for one revision: { person, ai_editor }. */
+    const reviewsOf = async (story, rev) => (rev ? await store.reviews.latestByKind(story.id, rev.number) : { person: null, ai_editor: null });
     const paragraphsOf = (rev) => (rev && rev.fields && Array.isArray(rev.fields.paragraphs) ? rev.fields.paragraphs : []);
     const snapshotOf = (rev) => (rev && rev.fields && Array.isArray(rev.fields.sources) ? rev.fields.sources : []);
 
@@ -208,7 +227,7 @@ function createPublication({ store, config, outbox, indexnow }) {
 
     return {
         POLICY: policy, OWNER, abs, storyPath, storyUrl, topicPath, feedId,
-        authorshipOf, reviewOf, paragraphsOf, snapshotOf, liveSources, support, decide, topicOf,
+        authorshipOf, reviewOf, reviewsOf, paragraphsOf, snapshotOf, liveSources, support, decide, topicOf,
         documentFor, syncIndex, snapshot, afterChange, plain,
     };
 }
