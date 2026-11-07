@@ -196,7 +196,7 @@ ${raw(notices.join(''))}
 <h1>${m.headline}</h1>
 <p class="byline">${m.authors.length ? h`By ${m.authors.map((a) => a.name).join(', ')} · ` : ''}OpenVibe.News${m.first_published_at ? h` · ${time(Date.parse(m.first_published_at))}` : ''}${m.rev.number > 1 && m.first_published_at && Date.parse(m.updated_at) > Date.parse(m.first_published_at) + 60000 ? h` · updated ${time(Date.parse(m.updated_at))}` : ''}${m.topic ? h` · <a href="/topics/${m.topic.slug}">${m.topic.name}</a>` : ''}${m.story.state !== 'published' && m.story.state !== 'retracted' ? h` <span class="badge">${m.story.state}</span>` : ''}</p>
 ${m.disclosure ? h`<p class="disclosure" role="note"><strong>${m.disclosure.short}.</strong> ${m.disclosure.long}</p>` : ''}
-<p class="story-share">${raw(kit.share({ title: m.headline, url: m.url, text: m.paragraphs[0] ? m.paragraphs[0].text.slice(0, 200) : '', kind: 'story', id: m.story.id }))}</p>
+<p class="story-share">${raw(kit.share({ title: m.headline, url: m.url, text: m.paragraphs[0] ? m.paragraphs[0].text.slice(0, 200) : '', kind: 'story', id: m.story.id }))} ${raw(kit.askAgent({ text: `About the story “${m.headline}” (${m.url}): ` }))}</p>
 </header>
 <div class="story-body">${m.paragraphs.map((p) => h`<p${p.supported ? '' : raw(' class="unsupported"')}>${p.text} ${cites(p.sources)}${p.supported ? '' : h` <span class="badge">source removed</span>`}</p>`)}</div>
 <p class="meta">Numbers in brackets point to the sources below. Headlines, outlets, authors and dates in the table are as each source published them; the text above is written by OpenVibe.News.</p>
