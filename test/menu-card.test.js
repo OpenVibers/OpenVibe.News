@@ -6,7 +6,7 @@
 // cached for five minutes. The public listing is exercised on a real (PGlite) database too.
 const assert = require('assert');
 const contracts = require('openvibe-contracts');
-const { createMenuCard, cardFrom, startOfDay, ago, plain, CARD_TTL_S } = require('../server/menu-card');
+const { createMenuCard, cardFrom, cardFromBriefs, startOfDay, ago, plain, CARD_TTL_S } = require('../server/menu-card');
 const { testDb } = require('./helpers/db');
 const { createStore } = require('../server/db');
 const { createStories } = require('../server/domain/stories');
@@ -68,6 +68,14 @@ assert.strictEqual(ago(NOW - 30_000, NOW), 'just now');
 assert.strictEqual(ago(NOW - 3 * 60 * 60_000, NOW), '3h ago');
 assert.strictEqual(ago(null, NOW), '');
 assert.strictEqual(startOfDay(NOW), Date.parse('2026-11-07T00:00:00Z'));
+
+// ── No published story: the newest AI briefs, said to be AI briefs (11-07) ──
+const brief = (o = {}) => ({ kind: 'summary', stub: false, paragraphs: [{ text: 'It says.' }], cluster_id: 'cl_1', headline: 'EU aid for climate projects', item_count: 3, window_end: NOW - 2 * 3600_000, ...o });
+const fromBriefs = cardFromBriefs([brief(), brief({ cluster_id: 'cl_2', stub: true }), brief({ cluster_id: 'cl_3', paragraphs: [] }), brief({ cluster_id: 'cl_4', kind: 'event' }), brief({ cluster_id: 'bad id/x' })], NOW);
+assert.strictEqual(fromBriefs.title, 'Latest AI briefs');
+assert.deepStrictEqual(fromBriefs.items, [{ title: 'EU aid for climate projects', meta: 'AI brief · 3 reports · 2h ago', url: 'https://openvibe.news/briefs/cl_1' }], 'summaries with text only, each said to be an AI brief');
+assert.deepStrictEqual(fromBriefs.more, { label: 'All AI briefs', url: 'https://openvibe.news/briefs' });
+assert.ok(contracts.validate('frame.menu-cards@1', [fromBriefs]).valid);
 
 // ── The five-minute cache and the route's headers ───────────────────────
 (async () => {
@@ -134,5 +142,10 @@ assert.strictEqual(startOfDay(NOW), Date.parse('2026-11-07T00:00:00Z'));
         await handle.close();
     }
 
-    console.log('menu card: top/latest, contract, public listing, retracted filter, plain text, 5 min cache, CORS and last-good card');
+    // With no story the route falls back to the briefs; a story, when there is one, still wins.
+    const viaBriefs = createMenuCard({ load: async () => [], loadBriefs: async () => [brief()], now: () => NOW });
+    assert.strictEqual((await viaBriefs.card()).title, 'Latest AI briefs');
+    const storyWins = createMenuCard({ load: async () => [item()], loadBriefs: async () => [brief()], now: () => NOW });
+    assert.notStrictEqual((await storyWins.card()).title, 'Latest AI briefs');
+    console.log('menu card: top/latest, contract, public listing, retracted filter, plain text, 5 min cache, CORS last-good card, and AI briefs when no story is published');
 })().catch((err) => { console.error(err); process.exit(1); });

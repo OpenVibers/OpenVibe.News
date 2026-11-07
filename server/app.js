@@ -219,6 +219,8 @@ async function createApp(opts = {}) {
                 const { stories: rows } = await stories.listPublished({ limit: 20 });
                 return await reading.listItems(rows);
             },
+            // No published story yet: the newest AI briefs, as the home shows them (11-07).
+            loadBriefs: async () => (briefs ? await briefs.latest(12) : []),
         });
         app.get('/.well-known/openvibe-menu.json', menuCard.handler);
     }
