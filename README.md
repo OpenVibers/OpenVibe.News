@@ -448,7 +448,7 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 
 <!-- versions:start -->
 - openvibe-contracts: v0.373.0
-- openvibe-sdk: v0.123.0
+- openvibe-sdk: v0.125.0
 - openvibe-shared: v4.173.0
 - openvibe-publishing: v1.4.1
 <!-- versions:end -->
