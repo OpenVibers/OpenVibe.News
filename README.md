@@ -3,6 +3,9 @@
 > Source-backed stories: clustered coverage, cited paragraphs, perspectives, timelines and a
 > public correction history.
 
+**Live site:** https://openvibe.news · **API docs:** https://openvibe.services · **For AI:** https://openvibe.news/llms.txt
+**Run it:** `npm ci && npm run dev` (Node 22 or newer) · **Tests:** `npm test`
+
 **Status:** alpha (roadmap Wave 17, News half). The service runs and its tests pass. It is
 **public at `openvibe.news` since 2026-10-09**, after an independent pre-launch security review whose
 fixes shipped first; the domain no longer shows the OpenVibe.Sites placeholder. Its capabilities and
