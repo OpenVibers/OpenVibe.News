@@ -6,6 +6,7 @@
  * reports' own headlines and links are the outlets'.
  */
 const ssr = require('openvibe-publishing/ssr');
+const kit = require('openvibe-shared/kit');
 const { time, httpHref } = require('./pages');
 
 const { html: h, raw } = ssr;
@@ -89,7 +90,7 @@ function briefsIndex({ briefs }) {
     return String(h`<header class="site-header"><h1>AI briefs</h1><p class="lede">What the reports on a subject say, summarized by OpenVibe.AI with every paragraph linked to its reports, and labelled as AI. Editors' stories are on <a href="/">the front page</a>.</p></header>
 ${briefs.length ? h`<ol class="story-list">${briefs.map((b) => h`<li class="story-item"><h2 class="story-item-title"><a href="/briefs/${b.cluster_id}">${b.headline || b.label}</a> <span class="badge badge-ai">AI</span></h2>
 <p class="meta">${time(b.window_end)} · from ${b.item_count} reports${b.outlets ? ` by ${b.outlets} outlets` : ''}</p>${b.paragraphs[0] ? h`<p class="summary">${b.paragraphs[0].text.slice(0, 280)}${b.paragraphs[0].text.length > 280 ? '…' : ''}</p>` : ''}</li>`)}</ol>`
-        : h`<p class="empty">No briefs yet. One is written once two or more independent outlets have reported a subject.</p>`}`);
+        : raw(kit.empty({ icon: 'book', title: 'No briefs yet', text: 'One is written once two or more independent outlets have reported a subject.', action: { href: '/live', label: 'See the newest reports', icon: 'live' } }))}`);
 }
 
 /** /live: the newest reports as they arrive, grouped, with what is breaking. */
@@ -98,7 +99,7 @@ function livePage({ clusters, briefIds, breaking }) {
 ${clusters.length ? h`<ol class="wire-list wide live-list">${clusters.map((c) => h`<li class="wire-cluster${breaking.has(c.id) ? ' is-breaking' : ''}">
 <p class="wire-lead">${breaking.has(c.id) ? h`<span class="badge badge-breaking">Breaking</span> ` : ''}<strong>${c.label}</strong>${briefIds.has(c.id) ? h` · <a href="/briefs/${c.id}">AI brief</a>` : ''}</p>
 <ul class="wire-items">${c.items.slice(0, 5).map((i) => h`<li>${httpHref(i.url) ? h`<a href="${httpHref(i.url)}" rel="nofollow noopener" target="_blank">${i.headline}</a>` : i.headline} <span class="meta">${i.outlet} · ${time(i.published_at ? Date.parse(i.published_at) : null)}</span></li>`)}</ul></li>`)}</ol>`
-        : h`<p class="empty">Nothing new from the sources yet.</p>`}`);
+        : raw(kit.empty({ icon: 'live', title: 'Nothing new from the sources yet', text: 'New reports appear here as the sources publish them.', action: { href: '/wire', label: 'Read the wire', icon: 'list' } }))}`);
 }
 
 module.exports = { briefPage, briefsIndex, livePage, AI_NOTE, TONES };
