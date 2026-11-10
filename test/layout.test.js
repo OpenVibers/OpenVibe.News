@@ -85,7 +85,7 @@ const count = (html, re) => (html.match(re) || []).length;
             assert.ok(/<link rel="stylesheet" href="\/css\/news\.css\?v=[0-9a-f]+">/.test(head), 'the news stylesheet');
             assert.ok(head.includes('<meta property="article:published_time"'), 'article published time');
             assert.ok(body.includes('<div id="navbar-mount"></div>'), 'the navbar mount');
-            assert.ok(body.includes('<nav aria-label="Site"'), 'the noscript navigation');
+            assert.ok(body.includes('<nav class="openvibe-navbar" aria-label="Site"'), 'the server-rendered navigation');
             assert.ok(body.includes('id="ov-footer"'), 'the server-rendered footer');
             assert.ok(body.includes('OpenVibeFooter.init(window.__OV_PAGE.footer)'), 'the footer is initialised');
         }
