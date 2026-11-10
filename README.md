@@ -263,7 +263,7 @@ under [Grants the Network must hold](#grants-the-network-must-hold).
 
 - **PostgreSQL 18 and Valkey 9** (OpenVibe.Host `roles/data/`, ADR-035): every read and write is async through
   `openvibe-sdk/db`; Valkey holds the per-actor limit counters (optional: without `VALKEY_URL` they count per process).
-- **Packages** (pinned by release tarball): `openvibe-publishing` v1.4.1 (async PostgreSQL stores: revisions,
+- **Packages** (pinned by release tarball): `openvibe-publishing` v1.7.0 (async PostgreSQL stores: revisions,
   citations, authorship, seo (ai-summary and llms-full), index-hooks, ssr, taxonomy slugify, and the shared ingest/publication
   chassis: the Sources client, the change-cursor pull, the signed events consumer and the
   gate → document → outbox glue), `openvibe-contracts` v0.97.0,
@@ -453,5 +453,5 @@ Part of the [OpenVibe network](https://openvibe.network). Built in the open by [
 - openvibe-contracts: v0.384.0
 - openvibe-sdk: v0.125.0
 - openvibe-shared: v4.179.0
-- openvibe-publishing: v1.4.1
+- openvibe-publishing: v1.7.0
 <!-- versions:end -->
