@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use OpenVibe.News in research or a product, cite it as below."
+title: openvibe-news
+type: software
+authors:
+  - name: OpenVibe
+    alias: OpenVibers
+    website: https://openvibe.network
+repository-code: https://github.com/OpenVibers/OpenVibe.News
+url: https://openvibe.news
+license: AGPL-3.0-only
+abstract: "A news reader with clustered coverage, cited summaries, perspectives and timelines, at openvibe.news."
+keywords:
+  - openvibe
+  - atom
+  - citations
+  - feeds
+  - journalism
