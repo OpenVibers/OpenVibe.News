@@ -172,7 +172,7 @@ function createPublicRoutes(ctx) {
     const canMake = () => Boolean(briefs && config.briefs.enabled && ctx.ai && ctx.ai.enabled);
 
     router.get('/briefs', wrap(async (req, res) => {
-        send(req, res, 200, { title: 'AI briefs', description: 'What the reports on a subject say, summarized by AI with every paragraph linked to its reports.', decision: noindex('/briefs'), canonical: `${config.baseUrl}/briefs`, localStyles: ['css/briefs.css'], body: briefPages.briefsIndex({ briefs: briefs ? await briefs.latest(40) : [] }) }, { cacheable: true });
+        send(req, res, 200, { title: 'AI briefs', description: 'What the reports on a subject say, summarized by AI with every paragraph linked to its reports.', decision: noindex('/briefs'), canonical: `${config.baseUrl}/briefs`, localStyles: ['css/briefs.css'], styles: ['kit.css'], body: briefPages.briefsIndex({ briefs: briefs ? await briefs.latest(40) : [] }) }, { cacheable: true });
     }));
 
     router.get('/briefs/:id', wrap(async (req, res) => {
@@ -227,7 +227,7 @@ function createPublicRoutes(ctx) {
         const breaking = new Set(list.filter((c) => c.items.filter((i) => i.published_at && now - Date.parse(i.published_at) <= 2 * 3_600_000).length >= 3).map((c) => c.id));
         const briefIds = new Set(briefs ? (await briefs.latest(200)).map((b) => b.cluster_id) : []);
         res.set('Refresh', '60');
-        send(req, res, 200, { title: 'Live', description: 'The newest reports from the sources OpenVibe.News follows, as they arrive, with what is breaking.', decision: noindex('/live'), canonical: `${config.baseUrl}/live`, localStyles: ['css/briefs.css'], body: briefPages.livePage({ clusters: list, briefIds, breaking }) }, { cacheable: true });
+        send(req, res, 200, { title: 'Live', description: 'The newest reports from the sources OpenVibe.News follows, as they arrive, with what is breaking.', decision: noindex('/live'), canonical: `${config.baseUrl}/live`, localStyles: ['css/briefs.css'], styles: ['kit.css'], body: briefPages.livePage({ clusters: list, briefIds, breaking }) }, { cacheable: true });
     }));
 
     router.get('/topics', wrap(async (req, res) => {

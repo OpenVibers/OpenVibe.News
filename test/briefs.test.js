@@ -18,6 +18,13 @@ const SAME = { 'sec-fetch-site': 'same-origin' };
     try {
         launchReports(t.sources);
         await t.pull();
+        await check('an empty briefs list draws the kit empty state and one button', async () => {
+            const r = await t.get('/briefs');
+            assert.strictEqual(r.status, 200);
+            assert.match(r.text, /class="ovk-empty"/, 'the kit empty state is used, not a bare sentence');
+            assert.match(r.text, /No briefs yet/);
+            assert.match(r.text, /class="ovk-btn[^"]*" href="\/live"/, 'the empty state offers one button forward');
+        });
         const clusterId = (await t.db().prepare("SELECT cluster_id, count(*) AS n FROM news_source_items WHERE status = 'active' GROUP BY cluster_id ORDER BY n DESC").get()).cluster_id;
 
         await check('the sweep writes a cited summary for a cluster with two or more reports; uncited claims are dropped', async () => {
