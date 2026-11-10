@@ -13,7 +13,6 @@
 .brief-gaps { margin-top: 1rem; font-size: .9rem; }
 .live-dot { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: #ef4444; vertical-align: middle; animation: live-pulse 1.6s ease-in-out infinite; }
 @keyframes live-pulse { 50% { opacity: .35; } }
-@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
 .wire-cluster.is-breaking { border-left: 3px solid #ef4444; padding-left: 10px; }
 /* A story too few outlets covered: its reports, and why there is no summary (market outcome 4) */
 .badge-reports { background: color-mix(in srgb, var(--text-primary, #e6edf7) 9%, transparent); color: var(--text-secondary, #96a7c2); }
