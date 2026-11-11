@@ -87,7 +87,7 @@ async function createApp(opts = {}) {
     const discussion = createDiscussion({ store, publication, community, log });
     const ingest = createIngest({ store, config, clusters, outbox, sources, discussion, log });
     // Sharing (openvibe-sdk/share): a story's share row, its people and the one access check for the story page.
-    const sharing = opts.sharing || createSharing({ db: store.db, config, outbox, now: store.now, fetchImpl: opts.fetchImpl, log });
+    const sharing = opts.sharing || createSharing({ db: store.db, config, outbox, publication, now: store.now, fetchImpl: opts.fetchImpl, log });
     const stories = createStories({ store, config, publication, clusters, outbox, ai, discussion, log, sharing });
     ingest.setStories(stories);
     const topics = createTopics({ store });

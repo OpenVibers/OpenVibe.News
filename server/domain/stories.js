@@ -312,6 +312,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                 cluster = await clusters.resolve(cluster.id);
             }
             const topic = await topicFrom(input.topic);
+            const draftAudience = sharing && /^usr_/.test(String(subject)) ? await sharing.defaultAudience(subject) : 'private';
             return await store.tx(async () => {
                 const now = store.now();
                 const id = newStoryId(now);
@@ -320,7 +321,7 @@ function createStories({ store, config, publication, clusters, outbox, ai = null
                             VALUES (?, ?, ?, ?, ?, 'draft', 0, ?, ?, ?)`).run(id, slug, headline, cluster ? cluster.id : null, topic ? topic.id : null, subject, now, now);
                 const story = await q.byId.get(id);
                 // A new story is a draft: Only me until its editor shares it or publishes it.
-                if (sharing) await sharing.register({ subject: /^usr_/.test(String(subject)) ? subject : null }, id, 'private');
+                if (sharing) await sharing.register({ subject: /^usr_/.test(String(subject)) ? subject : null }, id, draftAudience);
                 if (cluster) {
                     const items = (await clusters.members(cluster.id)).filter((it) => it.status === 'active')
                         .sort((a, b) => String(a.published_at || '').localeCompare(String(b.published_at || '')) || a.first_seen_at - b.first_seen_at || (a.id < b.id ? -1 : 1));

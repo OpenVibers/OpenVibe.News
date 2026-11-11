@@ -16,6 +16,7 @@ const editorial = (why) => ({ keep: why });
 
 const TABLES = [
     { table: 'news_story_drafts', subject: 'owner', file: 'story-drafts.json', order: 'updated_at', columns: ['entity_id', 'base_revision', 'content', 'fields', 'created_at', 'updated_at'] },
+    { table: 'news_share_defaults', subject: 'owner_subject', file: 'story-share-defaults.json', columns: ['audience', 'updated_at'] },
     { table: 'subject_projections', subject: 'subject', file: 'profile.json', order: 'refreshed_at' },
     { table: 'news_stories', subject: 'created_by', file: 'stories.json', order: 'first_published_at', columns: ['id', 'slug', 'working_headline', 'topic_id', 'state', 'first_published_at', 'published_at'], erase: editorial('published journalism keeps its editor byline as the publication record') },
     { table: 'news_perspectives', subject: 'created_by', file: 'perspectives.json', order: 'created_at', columns: ['id', 'story_id', 'label', 'description', 'position', 'created_at'], erase: editorial('a published perspective is part of the story') },

@@ -20,7 +20,7 @@ const express = require('express');
 const { renderPage } = require('../render/layout');
 const editor = require('../render/editor');
 const { csrfToken, checkCsrf } = require('../auth/forms');
-const { asApiError } = require('./errors');
+const { ApiError, asApiError } = require('./errors');
 const access = require('../domain/access');
 const cache = require('openvibe-shared/cache-policy');
 
@@ -28,7 +28,7 @@ const cache = require('openvibe-shared/cache-policy');
 const one = (v) => (Array.isArray(v) ? (v.includes('1') ? '1' : v[v.length - 1]) : v);
 
 function createEditorRoutes(ctx) {
-    const { config, store, stories, clusters, topics, ingest, publication, viewers, publicRoutes, ai, limits } = ctx;
+    const { config, store, stories, clusters, topics, ingest, publication, viewers, publicRoutes, ai, limits, sharing } = ctx;
     const router = express.Router();
     const form = express.urlencoded({ extended: false, limit: '300kb' });
     router.use(['/edit', '/clusters'], viewers.middleware({ services: false }), (req, res, next) => {
@@ -84,8 +84,17 @@ function createEditorRoutes(ctx) {
             clusters: await Promise.all((await clusters.recent({ limit: 40 })).map(async (c) => ({ ...c, count: (await clusters.members(c.id)).length }))),
             stories: await stories.listAll({ limit: 100 }), flags, runs: await ingest.runs({ limit: 20 }), sources: await ingest.sourceStatus(),
             cursor: await ingest.cursor(), csrf: csrf(req), message: flashOf(req), aiEnabled: Boolean(ai && ai.enabled),
+            shareDefault: await sharing.defaultAudience(req.viewer.subject),
             pullOn: Boolean(config.worker.enabled && config.sources.pullIntervalMs),
         }));
+    }));
+
+    router.post('/edit/share-default', B('news.story.revise'), wrap(async (req, res) => {
+        const b = input(req.body);
+        if (!['private', 'people'].includes(b.audience)) throw new ApiError(422, 'share.default_invalid', 'Choose Only me or Specific people for new drafts');
+        await sharing.setDefaultAudience(req.viewer.subject, b.audience);
+        const changed = b.apply === '1' ? await sharing.applyDefault(req.viewer.subject, b.audience) : 0;
+        done(res, '/edit', `Draft default saved${changed ? `; ${changed} of your drafts changed` : ''}.`);
     }));
 
     router.post('/edit/pull', B('news.ingest.pull'), wrap(async (req, res) => {

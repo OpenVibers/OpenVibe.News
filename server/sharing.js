@@ -10,8 +10,7 @@
  *   - network.json       Network's identity lookups (@name → subject, and a person's card for the sheet)
  *   - events.publish     News' own outbox, so share.* envelopes go out with every news.* event
  *   - notify             Network's notification push; a refusal is logged, never allowed to stall the queue
- *   - onAudienceChange   keeps news_stories.audience in step (public→public, link→public but unlisted in intent? no: the
- *                        story page reads the share row; the column mirrors public/private for the lists)
+ *   - onAudienceChange   keeps news_stories.audience in step; only Everyone is public to lists and Search
  *   - onOwnerChange      moves news_stories.created_by to the new owner
  *
  * A draft is Only me. The sheet on it can name someone ("look at this before I post it"); the
@@ -25,8 +24,8 @@ const SERVICE = 'news';
 const KIND = 'story';
 const AUDIENCES = ['public', 'link', 'people', 'private'];
 /** News' visibility words to the SDK's, and back. */
-const TO_SDK = { public: 'public', unlisted: 'link', private: 'private' };
-const FROM_SDK = { public: 'public', link: 'public', people: 'private', private: 'private' };
+const TO_SDK = { public: 'public', link: 'link', unlisted: 'link', people: 'people', private: 'private' };
+const FROM_SDK = { public: 'public', link: 'private', people: 'private', private: 'private' };
 
 const refOf = (id) => ({ service: SERVICE, kind: KIND, id: String(id) });
 
@@ -38,7 +37,7 @@ function shareViewer(v) {
     return null;
 }
 
-function createSharing({ db, config, outbox, now = Date.now, fetchImpl = globalThis.fetch, log = console } = {}) {
+function createSharing({ db, config, outbox, publication, now = Date.now, fetchImpl = globalThis.fetch, log = console } = {}) {
     async function publish(envelope) { await outbox.emit(envelope); }
     const base = String(config.networkInternalUrl || config.networkUrl || '').replace(/\/+$/, '');
     const tokens = config.oauth && config.oauth.clientSecret ? serviceAuth.createTokenClient({
@@ -95,9 +94,13 @@ function createSharing({ db, config, outbox, now = Date.now, fetchImpl = globalT
     /** The row's audience change keeps the column the lists read in step (a story page reads the row itself). */
     async function onAudienceChange(ref, audience, tx) {
         if (ref.service !== SERVICE || ref.kind !== KIND) return;
-        const row = await tx.maybe('SELECT state FROM news_stories WHERE id = $1', [ref.id]);
+        const row = await tx.maybe('SELECT * FROM news_stories WHERE id = $1', [ref.id]);
         if (!row) return;
         await tx.exec('UPDATE news_stories SET audience = $1, updated_at = $2 WHERE id = $3', [FROM_SDK[audience] || 'private', now(), ref.id]);
+        if (row.state === 'published' && publication) {
+            const changed = await tx.maybe('SELECT * FROM news_stories WHERE id = $1', [ref.id]);
+            await publication.syncIndex(changed);
+        }
     }
 
     async function onOwnerChange(ref, from, to, tx) {
@@ -118,6 +121,33 @@ function createSharing({ db, config, outbox, now = Date.now, fetchImpl = globalT
     const sv = (viewer) => shareViewer(viewer);
     const at = (id) => refOf(id);
 
+    async function defaultAudience(owner) {
+        const row = await db.maybe('SELECT audience FROM news_share_defaults WHERE owner_subject = $1', [owner]);
+        return row ? row.audience : 'private';
+    }
+    async function setDefaultAudience(owner, audience) {
+        if (!['private', 'people'].includes(audience)) throw new Error('Invalid story draft default');
+        await db.exec(`INSERT INTO news_share_defaults (owner_subject, audience) VALUES ($1, $2)
+            ON CONFLICT (owner_subject) DO UPDATE SET audience = excluded.audience, updated_at = now()`, [owner, audience]);
+    }
+    async function applyDefault(owner, audience) {
+        if (!['private', 'people'].includes(audience)) throw new Error('Invalid story draft default');
+        const rows = await db.many(`SELECT id FROM news_stories WHERE created_by = $1 AND state IN ('draft', 'unpublished')`, [owner]);
+        let changed = 0;
+        for (const row of rows) {
+            const current = await db.maybe('SELECT audience FROM shares WHERE service = $1 AND kind = $2 AND resource_id = $3', [SERVICE, KIND, row.id]);
+            if (!current) {
+                await shares.register(at(row.id), { owner_subject: { type: 'user', id: owner }, audience });
+                await onAudienceChange(at(row.id), audience, db);
+                changed++;
+            } else if (current.audience !== audience) {
+                await shares.setAudience(sv({ subject: owner }), at(row.id), audience);
+                changed++;
+            }
+        }
+        return changed;
+    }
+
     return {
         shares,
         SERVICE,
@@ -125,6 +155,7 @@ function createSharing({ db, config, outbox, now = Date.now, fetchImpl = globalT
         AUDIENCES,
         refOf,
         shareViewer,
+        defaultAudience, setDefaultAudience, applyDefault,
         /** Register a post with the sharing system (inside the post's own transaction). */
         register: async (viewer, id, audience = 'private') => await shares.register(at(id), {
             owner_subject: viewer && viewer.subject ? { type: String(viewer.subject).startsWith('gst_') ? 'guest' : 'user', id: viewer.subject } : { type: 'service', id: SERVICE },
