@@ -299,7 +299,7 @@ function createPublicRoutes(ctx) {
         const group = ['outlet', 'perspective'].includes(req.query.group) ? req.query.group : 'number';
         const decision = preview ? await publication.decide(story, m.rev, { state: 'draft' }) : m.decision;
         const crumbs = [{ name: 'OpenVibe.News', url: '/' }, ...(m.topic ? [{ name: m.topic.name, url: publication.topicPath(m.topic) }] : []), { name: m.headline }];
-        const cacheable = !preview && (story.state === 'published' || story.state === 'retracted');
+        const cacheable = !preview && story.audience === 'public' && (story.state === 'published' || story.state === 'retracted');
         const comments = preview ? null : await commentsFor(req, story, m.headline);
         const signedIn = req.viewer.kind === 'user' && Boolean(req.viewer.subject);
         send(req, res, 200, {
@@ -364,7 +364,7 @@ function createPublicRoutes(ctx) {
         }
         if (asJson) {
             const m = await reading.storyModel(story);
-            cacheHeaders(res, { cacheable: req.viewer.kind === 'anonymous', robots: m.decision.robots });
+            cacheHeaders(res, { cacheable: req.viewer.kind === 'anonymous' && story.audience === 'public', robots: m.decision.robots });
             return res.json(reading.storyJson(m));
         }
         return await renderStory(req, res, { story });
@@ -374,6 +374,7 @@ function createPublicRoutes(ctx) {
     router.post('/stories/:slug/comments', rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false }), ctx.limits.signedIn('news.discussion.comment'), express.urlencoded({ extended: false, limit: '32kb' }), wrap(async (req, res) => {
         const story = await stories.bySlug(req.params.slug);
         if (!story || !story.published_revision || (story.state !== 'published' && story.state !== 'retracted')) return notFound(req, res);
+        if (!access.isEditor(config, req.viewer) && sharing && !await sharing.canView(req.viewer, story.id)) return notFound(req, res);
         const path = publication.storyPath(story);
         if (req.viewer.kind !== 'user' || !req.viewer.subject) return res.redirect(303, `/auth/login?next=${encodeURIComponent(path)}`);
         if (!checkCsrf(config, req.viewer, req.body && req.body._csrf)) return messagePage(req, res, 403, 'Form expired', 'Reload the story and try again.', { href: path, label: 'Back to the story' });

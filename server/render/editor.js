@@ -35,10 +35,14 @@ function why(reason) {
     return r.rule + (r.from ? ` from ${r.from}` : '');
 }
 
-function dashboard({ clusters, stories, flags, runs, sources, cursor, csrf, message, aiEnabled, pullOn }) {
+function dashboard({ clusters, stories, flags, runs, sources, cursor, csrf, message, aiEnabled, pullOn, shareDefault = 'private' }) {
     return String(h`<h1>Editor desk</h1>
 ${flash(message)}
 <p class="meta">Stories are written by editors from source items. Nothing is published until an editor publishes it${aiEnabled ? '; AI drafts wait for a person’s review' : ''}.</p>
+<form method="post" action="/edit/share-default" class="card">${csrfField(csrf)}
+<label>New story drafts ${select('audience', [['private', 'Only me'], ['people', 'Specific people']], shareDefault)}</label>
+<label><input type="checkbox" name="apply" value="1"> Apply to all my existing drafts</label>
+<button type="submit">Save default</button><p class="meta">Add names in each draft’s Share sheet before others can read it.</p></form>
 <section><h2>Open flags</h2>${flags.length ? h`<ul>${flags.map((f) => h`<li><a href="/edit/stories/${f.story_id}">${f.working_headline}</a> — ${f.kind.replace('_', ' ')}${f.pending_revision ? h` (pending revision ${f.pending_revision})` : ''} · ${time(f.created_at)}</li>`)}</ul>` : h`<p class="empty">None.</p>`}</section>
 <section><h2>Stories</h2>${stories.length ? h`<table><thead><tr><th>Headline</th><th>State</th><th>Revision</th><th>Updated</th></tr></thead><tbody>${stories.map((s) => h`<tr><td><a href="/edit/stories/${s.id}">${s.working_headline}</a></td><td>${STATE_LABEL[s.state]}</td><td>${s.published_revision || '—'}</td><td>${time(s.updated_at)}</td></tr>`)}</tbody></table>` : h`<p class="empty">No stories yet. Open one from a cluster below.</p>`}</section>
 <section><h2>Recent clusters</h2>${clusters.length ? h`<table><thead><tr><th>Cluster</th><th>Items</th><th>Latest</th></tr></thead><tbody>${clusters.map((c) => h`<tr><td><a href="/clusters/${c.id}">${c.label}</a></td><td>${c.count}</td><td>${time(c.window_end)}</td></tr>`)}</tbody></table>` : h`<p class="empty">No source items have arrived yet.</p>`}</section>

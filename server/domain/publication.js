@@ -126,7 +126,7 @@ function createPublication({ store, config, outbox, indexnow }) {
         const rec = authorshipOf(rev);
         const facts = {
             state: gateState(story, state),
-            visibility: 'public',
+            visibility: story.audience === 'public' ? 'public' : 'private',
             canonicalUrl: storyUrl(story),
             text: plain(rev),
             citationCount: sup.independent,
@@ -181,7 +181,7 @@ function createPublication({ store, config, outbox, indexnow }) {
     }
 
     function snapshot(story) {
-        return story ? { state: story.state, visibility: 'public', revision: story.published_revision, url: storyUrl(story) } : null;
+        return story ? { state: story.state, visibility: story.audience === 'public' ? 'public' : 'private', revision: story.published_revision, url: storyUrl(story) } : null;
     }
 
     /**

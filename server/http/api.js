@@ -74,7 +74,7 @@ function itemDto(it) {
 }
 
 function createApi(ctx) {
-    const { config, stories, clusters, briefs, publication, reading, topics, ingest, viewers, limits } = ctx;
+    const { config, stories, clusters, briefs, publication, reading, topics, ingest, viewers, limits, sharing } = ctx;
     const router = express.Router();
     router.use(cors(config.apiCorsOrigins));
     router.use(viewers.middleware());
@@ -177,6 +177,7 @@ function createApi(ctx) {
             return { story: await storyDto(story), published: m ? reading.storyJson(m) : null };
         }
         if (!story.published_revision || (story.state !== 'published' && story.state !== 'retracted')) throw new ApiError(404, 'story.not_found', 'No such story');
+        if (sharing && !await sharing.canView(req.viewer, story.id)) throw new ApiError(404, 'story.not_found', 'No such story');
         return { published: reading.storyJson(await reading.storyModel(story)) };
     }));
 
