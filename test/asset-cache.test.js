@@ -22,7 +22,7 @@ const { boot, check, done } = require('./helpers/boot');
         for (const path of ['/css/news.css?v=deadbeefdeadbeef', '/css/news.css']) {
             const r = await t.get(path);
             assert.strictEqual(r.status, 200, `${path} → ${r.status}`);
-            assert.strictEqual(r.headers.get('cache-control'), 'public, max-age=300, stale-while-revalidate=86400', path);
+            assert.strictEqual(r.headers.get('cache-control'), 'public, max-age=300, stale-while-revalidate=300', path);
         }
     });
 
