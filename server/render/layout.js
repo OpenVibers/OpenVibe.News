@@ -22,11 +22,11 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 // The product's own places: the main ones carry an icon (phones get them as the bottom tab bar), the rest fold
 // into the navbar's More (Shared 4.22). Search is the navbar's magnifier; What shipped is the footer's.
 const NAV_LINKS = [
-    { label: 'News', href: '/', icon: 'fa-newspaper' },
-    { label: 'Topics', href: '/topics', icon: 'fa-tag' },
-    { label: 'Wire', href: '/wire', icon: 'fa-bolt' },
-    { label: 'Live', href: '/live', icon: 'fa-tower-broadcast' },
-    { label: 'AI briefs', href: '/briefs', icon: 'fa-brain' },
+    { label: 'News', href: '/', icon: 'news' },
+    { label: 'Topics', href: '/topics', icon: 'tag' },
+    { label: 'Wire', href: '/wire', icon: 'zap' },
+    { label: 'Live', href: '/live', icon: 'live' },
+    { label: 'AI briefs', href: '/briefs', icon: 'brain' },
 ];
 
 const hashes = new Map();
@@ -72,7 +72,7 @@ function renderPage(o) {
     };
     // This site's own account links live in the shared navbar's account menu (the page's account
     // bar below is only for visitors without JavaScript).
-    if (signedIn) nav.menu = { before: (o.editor ? [{ label: 'Editor desk', href: '/edit', icon: 'fa-pen' }] : []) };
+    if (signedIn) nav.menu = { before: (o.editor ? [{ label: 'Editor desk', href: '/edit', icon: 'pencil' }] : []) };
     const footer = { service: 'news', variant: 'auto', path: o.path, mount: '#ov-footer', brandName: SITE_NAME, updates: '/updates' };   // full on the front page only (Shared 4.19)
     const account = signedIn
         ? `${o.editor ? '<a href="/edit">Editor desk</a> · ' : ''}<a href="/auth/logout?next=${loginNext}">Sign out</a>`
