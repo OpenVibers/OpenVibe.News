@@ -46,7 +46,7 @@ table.sources tr:target { background: var(--bg-card, #131c2e); }
 .comment p { margin: 4px 0; }
 .comment-form textarea { font-family: inherit; }
 .ov-breadcrumbs ol { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; font-size: .9rem; }
-.ov-breadcrumbs li + li::before { content: "›"; margin-right: 6px; color: var(--text-muted); }
+.ov-breadcrumbs li + li::before { content: ""; display: inline-block; width: 10px; height: 10px; vertical-align: -1px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.9 3.6l8.4 8.4l-8.4 8.4'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7.9 3.6l8.4 8.4l-8.4 8.4'/%3E%3C/svg%3E") center / contain no-repeat; margin-right: 6px; color: var(--text-muted); }
 .ov-pagination { display: flex; gap: 10px; flex-wrap: wrap; margin: 20px 0; }
 .notice { border-left: 3px solid var(--info, #38bdf8); padding: 6px 12px; background: var(--bg-card, #131c2e); }
 .notice.error { border-color: var(--danger, #ef4444); }

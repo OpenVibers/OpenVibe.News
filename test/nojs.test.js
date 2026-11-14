@@ -102,7 +102,7 @@ const BODY = [
     await check('the editor’s diff page and the revisions list work as plain links', async () => {
         const diff = await t.get(`/edit/stories/${storyId}/diff?from=1&to=2`, { as: ed });
         assert.strictEqual(diff.status, 200);
-        assert.match(diff.text, /Revision 1 → 2/);
+        assert.match(diff.text, /Revision 1 to 2/);   // design rule 169: words, not a text arrow
         assert.match(diff.text, /Changed fields: .*perspectives/);
         const edit = await t.get(`/edit/stories/${storyId}`, { as: ed });
         assert.match(edit.text, /readers see revision 2/);
