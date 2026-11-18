@@ -7,8 +7,10 @@
  */
 const ssr = require('openvibe-publishing/ssr');
 const { time, httpHref } = require('./pages');
+const glyphs = require('openvibe-shared/glyphs');
 
 const { html: h, raw } = ssr;
+const back = raw(glyphs.svg('arrow-left', { size: 14 }));
 const csrfField = (csrf) => h`<input type="hidden" name="_csrf" value="${csrf}">`;
 const parse = (s, d) => { try { return s ? JSON.parse(s) : d; } catch { return d; } };
 const STATE_LABEL = { draft: 'Draft', published: 'Published', unpublished: 'Unpublished', retracted: 'Retracted' };
@@ -57,7 +59,7 @@ ${runs.length ? h`<table><thead><tr><th>When</th><th>Origin</th><th>State</th><t
 
 function clusterPage({ cluster, items, audit, others, storiesOf, topics, csrf, message }) {
     const open = cluster.status === 'open';
-    return String(h`<p><a href="/edit">← Editor desk</a></p>
+    return String(h`<p><a href="/edit">${back} Editor desk</a></p>
 <h1>Cluster: ${cluster.label}</h1>
 ${flash(message)}
 <p class="meta">${cluster.id} · ${cluster.status}${cluster.merged_into ? h` into <a href="/clusters/${cluster.merged_into}">${cluster.merged_into}</a>` : ''}${cluster.split_from ? h` · split from <a href="/clusters/${cluster.split_from}">${cluster.split_from}</a>` : ''} · items grouped by shared named entities and terms within a time window; every membership says why.</p>
@@ -71,7 +73,7 @@ ${open ? h`<section class="card"><h2>Merge another cluster into this one</h2><fo
 <label for="other">Cluster</label>${select('other', others.map((o) => [o.id, `${o.label} (${o.id})`]), '')}
 <label for="merge-reason">Reason</label><input id="merge-reason" name="reason" maxlength="500">
 <button type="submit">Merge</button></form></section>` : ''}
-<section><h2>History</h2>${audit.length ? h`<ul>${audit.map((a) => h`<li>${a.action.replace('_', ' ')} · ${a.cluster_id} ⇄ ${a.other_id} · ${a.item_ids.length} items · ${a.actor}${a.reason ? h` — ${a.reason}` : ''}${a.reversed_by ? h` · reversed by ${a.reversed_by}` : ''}${!a.reversed_by && (a.action === 'merge' || a.action === 'split') ? h` <form class="inline" method="post" action="/clusters/audit/${a.id}/reverse">${csrfField(csrf)}<button type="submit">Reverse</button></form>` : ''}</li>`)}</ul>` : h`<p class="empty">No merges or splits.</p>`}</section>
+<section><h2>History</h2>${audit.length ? h`<ul>${audit.map((a) => h`<li>${a.action.replace('_', ' ')} · ${a.cluster_id} and ${a.other_id} · ${a.item_ids.length} items · ${a.actor}${a.reason ? h` — ${a.reason}` : ''}${a.reversed_by ? h` · reversed by ${a.reversed_by}` : ''}${!a.reversed_by && (a.action === 'merge' || a.action === 'split') ? h` <form class="inline" method="post" action="/clusters/audit/${a.id}/reverse">${csrfField(csrf)}<button type="submit">Reverse</button></form>` : ''}</li>`)}</ul>` : h`<p class="empty">No merges or splits.</p>`}</section>
 <section><h2>Stories from this cluster</h2>${storiesOf.length ? h`<ul>${storiesOf.map((s) => h`<li><a href="/edit/stories/${s.id}">${s.working_headline}</a> (${s.state})</li>`)}</ul>` : h`<p class="empty">None yet.</p>`}
 ${open ? h`<form method="post" action="/clusters/${cluster.id}/stories" class="card">${csrfField(csrf)}
 <h3>Open a story</h3><p class="meta">The cluster's live, non-duplicate items become the first sources [1], [2], … You write the headline and text.</p>
@@ -86,7 +88,7 @@ function storyEditor({ story, head, problems, sources, timeline, perspectives, f
     const needsReview = rec && (rec.mode === 'ai' || rec.mode === 'hybrid');
     const openFlags = flags.filter((f) => f.status === 'open');
     const live = sources.filter((s) => !s.detached_at);
-    return String(h`<p><a href="/edit">← Editor desk</a>${story.cluster_id ? h` · <a href="/clusters/${story.cluster_id}">Cluster</a>` : ''}${story.published_revision ? h` · <a href="${publicUrl}">Public page</a>` : ''}</p>
+    return String(h`<p><a href="/edit">${back} Editor desk</a>${story.cluster_id ? h` · <a href="/clusters/${story.cluster_id}">Cluster</a>` : ''}${story.published_revision ? h` · <a href="${publicUrl}">Public page</a>` : ''}</p>
 <h1>${story.working_headline}</h1>
 ${flash(message)}
 <p class="meta">${story.id} · ${STATE_LABEL[story.state]}${story.published_revision ? ` · readers see revision ${story.published_revision}` : ''}${head ? ` · latest revision ${head.number}` : ''}</p>
@@ -156,13 +158,13 @@ ${flags.length ? h`<ul>${flags.map((f) => h`<li>${f.kind.replace('_', ' ')} · $
 }
 
 function diffPage({ story, diff }) {
-    return String(h`<p><a href="/edit/stories/${story.id}">← Back to the story</a></p><h1>Revision ${diff.from} → ${diff.to}</h1>
+    return String(h`<p><a href="/edit/stories/${story.id}">${back} Back to the story</a></p><h1>Revision ${diff.from} to ${diff.to}</h1>
 ${diff.fields.length ? h`<p class="meta">Changed fields: ${diff.fields.map((f) => f.field).join(', ')}</p>` : ''}
 <div class="diff">${raw(ssr.diffHtml(diff.content))}</div>`);
 }
 
 function topicsPage({ topics, csrf, message }) {
-    return String(h`<p><a href="/edit">← Editor desk</a></p><h1>Topics</h1>${flash(message)}
+    return String(h`<p><a href="/edit">${back} Editor desk</a></p><h1>Topics</h1>${flash(message)}
 <ul>${topics.map((t) => h`<li>${t.name} <span class="meta">/topics/${t.slug}</span></li>`)}</ul>
 <form method="post" action="/edit/topics">${csrfField(csrf)}<label for="name">Name</label><input id="name" name="name" maxlength="80" required><label for="description">Description</label><input id="description" name="description" maxlength="300"><button type="submit">Add topic</button></form>`);
 }
