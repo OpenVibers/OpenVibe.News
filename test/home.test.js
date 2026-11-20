@@ -57,9 +57,11 @@ const ld = (text) => [...text.matchAll(/<script type="application\/ld\+json">([\
         });
 
         await check('kept for signed-out visitors until something it reads changes (11-20: ~140 ms a request before)', async () => {
+            const before = t.ctx.frontBuilds || 0;
             const a = await t.get('/');
             const b = await t.get('/');
             assert.strictEqual(a.text, b.text, 'nothing changed: the same page');
+            assert.ok(t.ctx.frontBuilds >= 1 && t.ctx.frontBuilds - before <= 1, `built at most once for two visits (${before} → ${t.ctx.frontBuilds}); the key query must work`);
             assert.ok(!a.text.includes('Fresh Wire'));
             t.sources.addSource('fresh-wire', { name: 'Fresh Wire' });
             t.sources.addItem({ source_key: 'fresh-wire', title: 'A report that just came in', url: 'https://fresh.example/news/1', published_at: '2026-09-22T09:00:00Z' });
