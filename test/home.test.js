@@ -56,6 +56,18 @@ const ld = (text) => [...text.matchAll(/<script type="application\/ld\+json">([\
             ['/live', '/briefs', '/wire', '/topics', '/feed.xml', '/updates'].forEach((p) => assert.ok(text.includes(`href="${p}"`), p));
         });
 
+        await check('kept for signed-out visitors until something it reads changes (11-20: ~140 ms a request before)', async () => {
+            const a = await t.get('/');
+            const b = await t.get('/');
+            assert.strictEqual(a.text, b.text, 'nothing changed: the same page');
+            assert.ok(!a.text.includes('Fresh Wire'));
+            t.sources.addSource('fresh-wire', { name: 'Fresh Wire' });
+            t.sources.addItem({ source_key: 'fresh-wire', title: 'A report that just came in', url: 'https://fresh.example/news/1', published_at: '2026-09-22T09:00:00Z' });
+            await t.pull();
+            const c = await t.get('/');
+            assert.ok(c.text.includes('<b>Fresh Wire</b>'), 'a new report shows on the next load, never held back');
+        });
+
         await check('the new sources place their reports in their topics', async () => {
             assert.deepStrictEqual(topicsFor({ label: 'tape measure', headlines: [], sources: ['nist-news'] }), ['science']);
             assert.deepStrictEqual(topicsFor({ label: 'newsroom', headlines: [], sources: ['cdc-newsroom'] }), ['health']);
