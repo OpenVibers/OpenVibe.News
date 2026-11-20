@@ -103,7 +103,12 @@ function createPublicRoutes(ctx) {
     const frontKey = store.db.prepare(`SELECT (SELECT max(updated_at) FROM news_source_items) AS items, (SELECT count(*) FROM news_source_items) AS item_n,
         (SELECT max(updated_at) FROM news_story_clusters) AS clusters, (SELECT max(created_at) FROM news_cluster_briefs) AS briefs,
         (SELECT count(*) FROM news_cluster_briefs) AS brief_n, (SELECT max(updated_at) FROM news_stories) AS stories,
-        (SELECT count(*) FROM news_stories) AS story_n, (SELECT max(updated_at) FROM news_topics) AS topics, (SELECT count(*) FROM news_topics) AS topic_n`);
+        (SELECT count(*) FROM news_stories) AS story_n, (SELECT max(updated_at) FROM news_topics) AS topics, (SELECT count(*) FROM news_topics) AS topic_n,
+        (SELECT COALESCE(SUM(id), 0) FROM news_stories WHERE state IN ('published','retracted') AND audience = 'public') AS listed,
+        (SELECT COALESCE(SUM(id), 0) FROM news_source_items WHERE status = 'active' AND removed_at IS NULL) AS live_items,
+        (SELECT COALESCE(SUM(id), 0) FROM news_story_clusters WHERE status = 'open') AS open_clusters`);
+    // (The sums are of the ids in each set the page lists: a story leaving Everyone, a report removed or a cluster closed
+    // changes its set without touching updated_at.)
     async function frontPage() {
         let key;
         try { key = `${Math.floor(store.now() / 60000)}|${Object.values((await frontKey.get()) || {}).join('|')}`; } catch { return null; }
