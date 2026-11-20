@@ -104,14 +104,18 @@ function createPublicRoutes(ctx) {
         (SELECT max(updated_at) FROM news_story_clusters) AS clusters, (SELECT max(created_at) FROM news_cluster_briefs) AS briefs,
         (SELECT count(*) FROM news_cluster_briefs) AS brief_n, (SELECT max(updated_at) FROM news_stories) AS stories,
         (SELECT count(*) FROM news_stories) AS story_n, (SELECT max(updated_at) FROM news_topics) AS topics, (SELECT count(*) FROM news_topics) AS topic_n,
-        (SELECT COALESCE(SUM(id), 0) FROM news_stories WHERE state IN ('published','retracted') AND audience = 'public') AS listed,
-        (SELECT COALESCE(SUM(id), 0) FROM news_source_items WHERE status = 'active' AND removed_at IS NULL) AS live_items,
-        (SELECT COALESCE(SUM(id), 0) FROM news_story_clusters WHERE status = 'open') AS open_clusters`);
-    // (The sums are of the ids in each set the page lists: a story leaving Everyone, a report removed or a cluster closed
-    // changes its set without touching updated_at.)
+        (SELECT md5(COALESCE(string_agg(id::text, ',' ORDER BY id), '')) FROM news_stories WHERE state IN ('published','retracted') AND audience = 'public') AS listed,
+        (SELECT md5(COALESCE(string_agg(id::text, ',' ORDER BY id), '')) FROM news_source_items WHERE status = 'active' AND removed_at IS NULL) AS live_items,
+        (SELECT md5(COALESCE(string_agg(id::text, ',' ORDER BY id), '')) FROM news_story_clusters WHERE status = 'open') AS open_clusters`);
+    // (The hashes are of the ids in each set the page lists: a story leaving Everyone, a report removed or a cluster
+    // closed changes its set without touching updated_at. The ids are text: a SUM threw on production and the page was
+    // never kept, 11-20.)
     async function frontPage() {
         let key;
-        try { key = `${Math.floor(store.now() / 60000)}|${Object.values((await frontKey.get()) || {}).join('|')}`; } catch { return null; }
+        try { key = `${Math.floor(store.now() / 60000)}|${Object.values((await frontKey.get()) || {}).join('|')}`; } catch (err) {
+            console.warn('[News] front page key unavailable, built every time:', err.message);
+            return null;
+        }
         if (front && front.key === key) return front;
         const list = await stories.listPublished({ topicId: null, limit: PER_PAGE, offset: 0 });
         const [items, wire, home] = await Promise.all([
@@ -119,6 +123,7 @@ function createPublicRoutes(ctx) {
             Promise.all([homeData.stats(), briefs ? briefs.latest(12) : [], topics.list(), homeData.topicTally(), homeData.outlets()]),
         ]);
         front = { key, list, items, wire, home };
+        ctx.frontBuilds = (ctx.frontBuilds || 0) + 1;   // how many times it was built (the home test reads it)
         return front;
     }
 
