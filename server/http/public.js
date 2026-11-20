@@ -95,20 +95,43 @@ function createPublicRoutes(ctx) {
         return { topicBriefs, topicWire: wire.filter((c) => !briefed.has(c.id)).slice(0, 12), latestWire: wire.length ? [] : await clusters.wire({ limit: 6 }) };
     }
 
+    // The front page for someone signed out is the same for everyone (render/home.js), and building it took ~140 ms a
+    // request on production (2026-11-20; thirty days of clusters matched to topics, the outlets, the briefs), for every
+    // visitor: Cloudflare does not keep HTML and the 60 s Cache-Control is per browser. Its data is kept until anything it
+    // reads changes (the newest change in each table: one 4 ms query) or the minute turns (its day and week counts).
+    let front = null;
+    const frontKey = store.db.prepare(`SELECT (SELECT max(updated_at) FROM news_source_items) AS items, (SELECT count(*) FROM news_source_items) AS item_n,
+        (SELECT max(updated_at) FROM news_story_clusters) AS clusters, (SELECT max(created_at) FROM news_cluster_briefs) AS briefs,
+        (SELECT count(*) FROM news_cluster_briefs) AS brief_n, (SELECT max(updated_at) FROM news_stories) AS stories,
+        (SELECT count(*) FROM news_stories) AS story_n, (SELECT max(updated_at) FROM news_topics) AS topics, (SELECT count(*) FROM news_topics) AS topic_n`);
+    async function frontPage() {
+        let key;
+        try { key = `${Math.floor(store.now() / 60000)}|${Object.values((await frontKey.get()) || {}).join('|')}`; } catch { return null; }
+        if (front && front.key === key) return front;
+        const list = await stories.listPublished({ topicId: null, limit: PER_PAGE, offset: 0 });
+        const [items, wire, home] = await Promise.all([
+            reading.listItems(list.stories), clusters.wire({ limit: 8 }),
+            Promise.all([homeData.stats(), briefs ? briefs.latest(12) : [], topics.list(), homeData.topicTally(), homeData.outlets()]),
+        ]);
+        front = { key, list, items, wire, home };
+        return front;
+    }
+
     async function listing(req, res, { topic = null }) {
         const page = pageNumber(req);
         const path = topic ? publication.topicPath(topic) : '/';
-        const { total, stories: rows } = await stories.listPublished({ topicId: topic ? topic.id : null, limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
+        const kept = !topic && page === 1 && req.viewer && req.viewer.kind === 'anonymous' ? await frontPage() : null;
+        const { total, stories: rows } = kept ? kept.list : await stories.listPublished({ topicId: topic ? topic.id : null, limit: PER_PAGE, offset: (page - 1) * PER_PAGE });
         const pager = ssr.paginate({ page, perPage: PER_PAGE, total, href: (p) => (p === 1 ? path : `${path}?page=${p}`) });
         if (pager.outOfRange && total) return notFound(req, res);
-        const items = await reading.listItems(rows);
+        const items = kept ? kept.items : await reading.listItems(rows);
         // The front page's wire (render/pages.js): with clusters to show, the page is not empty even before a story.
-        const wire = !topic && page === 1 ? await clusters.wire({ limit: 8 }) : [];
+        const wire = kept ? kept.wire : (!topic && page === 1 ? await clusters.wire({ limit: 8 }) : []);
         const canonical = seo.canonicalUrl(config.baseUrl, pager.page === 1 ? path : `${path}?page=${pager.page}`, { query: ['page'] });
         const feeds = feedsFor(path);
         // The front page (page 1): what OpenVibe.News is for, then everything it has to read (render/home.js).
         if (!topic && pager.page === 1) {
-            const [stats, latestBriefs, topicList, tally, outlets] = await Promise.all([
+            const [stats, latestBriefs, topicList, tally, outlets] = kept ? kept.home : await Promise.all([
                 homeData.stats(), briefs ? briefs.latest(12) : [], topics.list(), homeData.topicTally(), homeData.outlets(),
             ]);
             const homeBriefs = latestBriefs.filter((b) => b.kind === 'summary' && !b.stub && b.paragraphs.length).slice(0, 6);
