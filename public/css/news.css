@@ -27,7 +27,7 @@ h3 { font-size: 1.1rem; margin: 1.2rem 0 .4rem; }
 .story-item-title a:hover { text-decoration: underline; }
 .summary { margin: 6px 0; }
 .story-body p.unsupported { opacity: .7; }
-sup.cites { font-size: .7rem; margin-left: 2px; }
+sup.cites { font-size: .75rem; margin-left: 2px; }
 sup.cites a { text-decoration: none; }
 .retraction { border: 2px solid var(--danger, #ef4444); border-radius: 10px; padding: 8px 16px; margin: 12px 0; }
 .retraction h2 { margin-top: .4rem; color: var(--danger-text, var(--danger, #ef4444)); }
